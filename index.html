@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Controle de Cartões</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+<!-- ══════════════ LOADING ══════════════ -->
+<div id="loading-screen">
+  <div class="spinner"></div>
+  <h1>💳 Cartões</h1>
+  <p id="loading-msg">Verificando sessão...</p>
+</div>
+
+<!-- ══════════════ LOGIN ══════════════ -->
+<div id="login-screen" class="hidden">
+  <div class="login-card">
+    <div class="login-logo">
+      <div class="icon">💳</div>
+      <h1>Controle de Cartões</h1>
+      <p>Entre para acessar seus dados</p>
+    </div>
+    <div class="login-field">
+      <label>Usuário</label>
+      <input type="text" id="login-username" placeholder="seu usuário" autocomplete="username">
+    </div>
+    <div class="login-field">
+      <label>Senha</label>
+      <input type="password" id="login-password" placeholder="••••••••" autocomplete="current-password">
+    </div>
+    <button class="login-btn" id="login-btn" onclick="doLogin()">Entrar</button>
+    <div class="login-error" id="login-error"></div>
+  </div>
+</div>
+
+<!-- ══════════════ TOAST ══════════════ -->
+<div id="toast"></div>
+
+<!-- ══════════════ APP ══════════════ -->
+<div class="app hidden" id="app">
+
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+    <div class="sidebar-logo">
+      <h1>💳 Cartões</h1>
+      <p>Controle de gastos</p>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-section-label">Menu</div>
+      <button class="nav-item active" onclick="goTo('lancamento')"><span>📝</span> Lançamentos</button>
+      <button class="nav-item" onclick="goTo('resumo')">
+        <span>👥</span> Por Pessoa
+        <span class="badge" id="badge-pessoas">0</span>
+      </button>
+      <button class="nav-item" onclick="goTo('cartoes-view')"><span>💳</span> Por Cartão</button>
+      <button class="nav-item" onclick="goTo('config')"><span>⚙️</span> Configurações</button>
+    </div>
+    <div class="sidebar-footer">
+      <div style="font-size:11px;color:var(--text3);line-height:1.8;margin-bottom:10px">
+        ☁️ Dados na nuvem<br>
+        <span id="sync-status" style="color:var(--green)">● Sincronizado</span>
+      </div>
+      <div id="user-display"
+        style="font-size:12px;color:var(--text2);margin-bottom:8px;font-weight:500;padding:0 2px">
+      </div>
+      <button class="logout-btn" onclick="doLogout()">🚪 Sair</button>
+    </div>
+  </div>
+
+  <!-- MAIN -->
+  <div class="main">
+    <div class="topbar">
+      <div>
+        <div class="topbar-title" id="page-title">Lançamentos</div>
+        <div class="topbar-sub"   id="page-sub">Adicione gastos por cartão e pessoa</div>
+      </div>
+      <div class="topbar-actions">
+        <button class="btn" onclick="openImportModal()">⬆ Importar CSV</button>
+        <button class="btn" onclick="exportCSV()">⬇ Exportar CSV</button>
+        <button class="btn primary" onclick="openNewMonthModal()" id="btn-new-month">+ Novo Mês</button>
+      </div>
+    </div>
+
+    <div class="content">
+
+      <!-- ─── LANÇAMENTOS ─── -->
+      <div id="page-lancamento">
+        <div class="month-selector" id="month-selector"></div>
+        <div class="card-chips"     id="card-chips"></div>
+
+        <div class="form-card">
+          <div class="form-card-header">
+            <h2>Adicionar gasto</h2>
+            <span id="form-card-info" style="font-size:12px;color:var(--text3)"></span>
+          </div>
+          <div class="form-grid">
+            <div class="field">
+              <label>Descrição <span class="hint">(opcional)</span></label>
+              <input type="text" id="f-desc" placeholder="Ex: Academia, Mercado..."
+                onkeydown="if(event.key==='Enter')addItem()">
+            </div>
+            <div class="field">
+              <label>Valor (R$)</label>
+              <input type="number" id="f-valor" placeholder="0,00" step="0.01"
+                onkeydown="if(event.key==='Enter')addItem()">
+            </div>
+            <div class="field">
+              <label>Pessoa</label>
+              <select id="f-pessoa"></select>
+            </div>
+            <div class="field">
+              <label>Parcelas</label>
+              <select id="f-parcelas">
+                <option value="1">À vista</option>
+                <option value="2">2x</option>  <option value="3">3x</option>
+                <option value="4">4x</option>  <option value="5">5x</option>
+                <option value="6">6x</option>  <option value="7">7x</option>
+                <option value="8">8x</option>  <option value="9">9x</option>
+                <option value="10">10x</option><option value="11">11x</option>
+                <option value="12">12x</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>&nbsp;</label>
+              <button class="btn primary" id="btn-add" onclick="addItem()">+ Adicionar</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="table-card">
+          <div class="table-card-header">
+            <h2 id="table-title">Gastos</h2>
+            <div>
+              <span class="total-label">Total do cartão:</span>
+              <span class="total-value" id="card-total">R$ 0,00</span>
+            </div>
+          </div>
+          <div class="scrollable">
+            <table>
+              <thead><tr>
+                <th>Descrição</th><th>Pessoa</th><th>Parcelas</th>
+                <th style="text-align:right">Valor</th><th></th>
+              </tr></thead>
+              <tbody id="items-tbody"></tbody>
+            </table>
+          </div>
+          <div id="items-empty" class="empty-state hidden">
+            <div class="icon">📋</div>
+            <p>Nenhum gasto lançado neste cartão ainda.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- ─── POR PESSOA ─── -->
+      <div id="page-resumo" class="hidden">
+        <div class="month-selector" id="month-selector-resumo"></div>
+        <p style="font-size:12px;color:var(--text3);margin-bottom:16px">
+          Clique no nome da pessoa para expandir. Clique em um cartão para ver os detalhes.
+        </p>
+        <div class="people-grid" id="people-grid"></div>
+      </div>
+
+      <!-- ─── POR CARTÃO ─── -->
+      <div id="page-cartoes-view" class="hidden">
+        <div class="month-selector" id="month-selector-cartoes"></div>
+        <div class="summary-grid"   id="cards-summary"></div>
+        <div id="cards-detail"></div>
+      </div>
+
+      <!-- ─── CONFIGURAÇÕES ─── -->
+      <div id="page-config" class="hidden">
+        <div class="settings-grid">
+          <div class="settings-card">
+            <h3>👤 Pessoas</h3>
+            <div id="persons-list"></div>
+            <div class="settings-add">
+              <input type="text" id="new-person" placeholder="Nome da pessoa..."
+                onkeydown="if(event.key==='Enter')addPerson()">
+              <button class="btn primary sm" onclick="addPerson()">Adicionar</button>
+            </div>
+          </div>
+          <div class="settings-card">
+            <h3>💳 Cartões</h3>
+            <div id="cards-list"></div>
+            <div class="settings-add">
+              <input type="text" id="new-card" placeholder="Nome do cartão..."
+                onkeydown="if(event.key==='Enter')addCard()">
+              <button class="btn primary sm" onclick="addCard()">Adicionar</button>
+            </div>
+          </div>
+        </div>
+        <div class="danger-zone">
+          <h3>⚠️ Zona de perigo</h3>
+          <button class="btn danger" onclick="clearAllData()">🗑 Apagar todos os dados</button>
+        </div>
+      </div>
+
+    </div><!-- /content -->
+  </div><!-- /main -->
+</div><!-- /app -->
+
+
+<!-- ══════════════ MODALS ══════════════ -->
+
+<!-- Novo Mês -->
+<div class="modal-overlay hidden" id="modal-new-month">
+  <div class="modal">
+    <h3>Novo mês</h3>
+    <div class="field">
+      <label>Nome (ex: Junho/2025)</label>
+      <input type="text" id="modal-month-name" placeholder="Junho/2025"
+        onkeydown="if(event.key==='Enter')createMonth()">
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal('modal-new-month')">Cancelar</button>
+      <button class="btn primary" onclick="createMonth()">Criar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Editar Gasto -->
+<div class="modal-overlay hidden" id="modal-edit">
+  <div class="modal">
+    <h3>✏️ Editar gasto</h3>
+    <input type="hidden" id="edit-id">
+    <div class="field">
+      <label>Descrição <span class="hint">(opcional)</span></label>
+      <input type="text" id="edit-desc" placeholder="—">
+    </div>
+    <div class="modal-grid-2">
+      <div class="field">
+        <label>Valor (R$)</label>
+        <input type="number" id="edit-valor" step="0.01">
+      </div>
+      <div class="field">
+        <label>Parcelas</label>
+        <select id="edit-parcelas">
+          <option value="1">À vista</option>
+          <option value="2">2x</option>  <option value="3">3x</option>
+          <option value="4">4x</option>  <option value="5">5x</option>
+          <option value="6">6x</option>  <option value="7">7x</option>
+          <option value="8">8x</option>  <option value="9">9x</option>
+          <option value="10">10x</option><option value="11">11x</option>
+          <option value="12">12x</option>
+        </select>
+      </div>
+    </div>
+    <div class="field">
+      <label>Pessoa</label>
+      <select id="edit-pessoa"></select>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal('modal-edit')">Cancelar</button>
+      <button class="btn primary" onclick="saveEdit()">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Importar CSV -->
+<div class="modal-overlay hidden" id="modal-import">
+  <div class="modal" style="width:520px">
+    <h3>⬆ Importar CSV</h3>
+    <div class="field">
+      <label>Arquivo CSV</label>
+      <input type="file" id="import-file" accept=".csv"
+        onchange="handleImportFile(this)"
+        style="padding:6px;cursor:pointer">
+    </div>
+    <div style="font-size:11px;color:var(--text3);margin-bottom:12px;line-height:1.7">
+      Colunas esperadas (em qualquer ordem):<br>
+      <strong style="color:var(--text2)">Cartao · Pessoa · Valor</strong>
+      <span style="color:var(--text3)"> — obrigatórias</span><br>
+      <span style="color:var(--text3)">Mes · Descricao · Parcelas — opcionais</span>
+    </div>
+    <div id="import-preview-wrap"></div>
+    <div class="import-info" id="import-info"></div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal('modal-import')">Cancelar</button>
+      <button class="btn primary" id="btn-confirm-import" disabled onclick="confirmImport()">
+        Confirmar importação
+      </button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ══════════════ SCRIPTS ══════════════ -->
+<script src="js/config.js"></script>
+<script src="js/state.js"></script>
+<script src="js/utils.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/db.js"></script>
+<script src="js/render.js"></script>
+<script src="js/importexport.js"></script>
+<script>checkSession();</script>
+
+</body>
+</html>
