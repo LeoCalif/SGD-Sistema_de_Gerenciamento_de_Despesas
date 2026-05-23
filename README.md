@@ -65,9 +65,6 @@ select id, 'seu_usuario' from auth.users where email = 'seu@email.com';
 
 ---
 
-## 🚀 Deploy
-
-
 ### 2. Vercel
 
 1. Acesse [vercel.com](https://vercel.com) e faça login com GitHub
