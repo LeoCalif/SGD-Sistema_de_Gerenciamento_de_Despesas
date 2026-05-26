@@ -8,8 +8,11 @@ function goTo(page) {
   const [t,s] = TITLES[page] || ['',''];
   document.getElementById('page-title').textContent = t;
   document.getElementById('page-sub').textContent   = s;
-  document.getElementById('btn-new-month').classList.toggle('hidden', page === 'config');
-  const pdfBtn = document.getElementById('btn-pdf-pessoa');
+  const newYearBtn    = document.getElementById('btn-new-year');
+  const deleteYearBtn = document.getElementById('btn-delete-year');
+  const pdfBtn        = document.getElementById('btn-pdf-pessoa');
+  if (newYearBtn)    newYearBtn.classList.toggle('hidden', page === 'config');
+  if (deleteYearBtn) deleteYearBtn.classList.toggle('hidden', page === 'config');
   if (pdfBtn) pdfBtn.style.display = page === 'resumo' ? 'flex' : 'none';
   // Close sidebar on mobile after nav
   closeSidebar();
@@ -86,24 +89,18 @@ function renderYearTabs(containerId, monthSelectorId) {
   (yearsMap[activeYear] || []).forEach(m => {
     const btn = document.createElement('button');
     btn.className = 'month-btn' + (m.id === state.currentMonth ? ' active' : '');
-    btn.innerHTML = `${esc(m.nome)}
-      <span class="del-month" title="Apagar mês"
-        onclick="event.stopPropagation();deleteMonth('${m.id}','${esc(m.nome)}')">✕</span>`;
+    btn.textContent = m.nome;
     btn.onclick = async () => {
       state.currentMonth = m.id;
       state.currentCard  = state.cards[0] || null;
       await loadGastos();
+      await propagateParcelasToMonth(m.id);
       renderPage(currentPage);
     };
     monthEl.appendChild(btn);
   });
 
-  // New month button
-  const nb = document.createElement('button');
-  nb.className   = 'new-month-btn';
-  nb.textContent = '+ Novo mês';
-  nb.onclick     = openNewMonthModal;
-  monthEl.appendChild(nb);
+  // No individual month creation — managed by year
 }
 
 // ── LANÇAMENTOS ───────────────────────────────────────
@@ -111,6 +108,19 @@ function renderLancamento() {
   renderYearTabs('year-tabs-lancamento', 'month-selector');
   renderCardChips();
   renderPersonSelect('f-pessoa');
+
+  if (!state.months.length) {
+    document.getElementById('card-chips').innerHTML = '';
+    document.getElementById('items-tbody').innerHTML = '';
+    document.getElementById('items-empty').classList.remove('hidden');
+    document.getElementById('items-empty').innerHTML =
+      '<div class="icon">📅</div><p>Nenhum ano criado ainda.<br>Clique em <strong>📅 Novo Ano</strong> para começar.</p>';
+    document.getElementById('card-total').textContent = 'R$ 0,00';
+    document.getElementById('table-title').textContent = 'Gastos';
+    document.getElementById('form-card-info').textContent = '';
+    return;
+  }
+
   renderItemsTable();
   document.getElementById('form-card-info').textContent =
     state.currentCard ? 'Cartão: ' + state.currentCard : '';
@@ -151,10 +161,14 @@ function renderItemsTable() {
   empty.classList.add('hidden');
   tbody.innerHTML = items.map(g => {
     const pc = getColor(state.persons, g.pessoa);
+    const pAtual = g.parcela_atual || 1;
+    const pLabel = g.parcelas > 1
+      ? `<span style="font-weight:600">${pAtual}/${g.parcelas}x</span>`
+      : 'À vista';
     return `<tr>
       <td>${descLabel(g.descricao)}</td>
       <td><span class="pill" style="background:${pc}22;color:${pc}">${esc(g.pessoa)}</span></td>
-      <td style="color:var(--text3)">${parcLabel(g.parcelas)}</td>
+      <td style="color:var(--text3)">${pLabel}</td>
       <td class="amount-cell" style="text-align:right;color:${Number(g.valor)<0?'var(--red)':'var(--green)'}">R$ ${fmt(Number(g.valor))}</td>
       <td><div class="row-actions">
         <button class="edit-btn"   onclick="openEditModal('${g.id}')" title="Editar">✏️</button>
@@ -214,8 +228,9 @@ function renderResumo() {
       const cc       = getColor(state.cards, c);
       const cardData = byPerson[person][c];
       const itemsHtml = cardData.items.map(g => {
+        const pAt = g.parcela_atual || 1;
         const badge = g.parcelas > 1
-          ? `<span class="parc-badge" style="background:${cc}22;color:${cc}">${g.parcelas}x</span>`
+          ? `<span class="parc-badge" style="background:${cc}22;color:${cc}">${pAt}/${g.parcelas}x</span>`
           : `<span style="color:var(--text3)">À vista</span>`;
         const dLabel = g.descricao
           ? `<span class="detail-item-desc">${esc(g.descricao)}</span>`
