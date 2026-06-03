@@ -1,7 +1,7 @@
 // ── NAVIGATION ────────────────────────────────────────
 function goTo(page) {
   currentPage = page;
-  ['lancamento','resumo','cartoes-view','config'].forEach(p =>
+  ['lancamento','resumo','cartoes-view','caixinhas','config','compartilhados'].forEach(p =>
     document.getElementById('page-'+p)?.classList.toggle('hidden', p !== page));
   document.querySelectorAll('.nav-item').forEach(b =>
     b.classList.toggle('active', b.getAttribute('onclick')?.includes(page)));
@@ -11,8 +11,9 @@ function goTo(page) {
   const newYearBtn    = document.getElementById('btn-new-year');
   const deleteYearBtn = document.getElementById('btn-delete-year');
   const pdfBtn        = document.getElementById('btn-pdf-pessoa');
-  if (newYearBtn)    newYearBtn.classList.toggle('hidden', page === 'config');
-  if (deleteYearBtn) deleteYearBtn.classList.toggle('hidden', page === 'config');
+  const hideTopbar = page === 'config' || page === 'caixinhas' || page === 'compartilhados';
+  if (newYearBtn)    newYearBtn.classList.toggle('hidden', hideTopbar);
+  if (deleteYearBtn) deleteYearBtn.classList.toggle('hidden', hideTopbar);
   if (pdfBtn) pdfBtn.style.display = page === 'resumo' ? 'flex' : 'none';
   // Close sidebar on mobile after nav
   closeSidebar();
@@ -20,10 +21,12 @@ function goTo(page) {
 }
 
 function renderPage(p) {
-  if (p === 'lancamento')     renderLancamento();
-  else if (p === 'resumo')    renderResumo();
+  if (p === 'lancamento')        renderLancamento();
+  else if (p === 'resumo')       renderResumo();
   else if (p === 'cartoes-view') renderCartoesView();
-  else if (p === 'config')    renderConfig();
+  else if (p === 'caixinhas')    renderCaixinhas();
+  else if (p === 'compartilhados') renderCompartilhados();
+  else if (p === 'config')       renderConfig();
   updateBadges();
 }
 
@@ -360,11 +363,14 @@ function renderCartoesView() {
 
 // ── CONFIG ────────────────────────────────────────────
 function renderConfig() {
-  document.getElementById('persons-list').innerHTML = state.persons.map(p => {
-    const c = getColor(state.persons,p);
+  document.getElementById('persons-list').innerHTML = state.personsData.map(p => {
+    const c = getColor(state.persons, p.nome);
+    const linkLabel = p.vinculo_user_id 
+      ? ' <span style="color:var(--green);font-size:11px;font-weight:500;">👥 (vinculado)</span>' 
+      : ` <button class="btn sm ghost" onclick="startLinkPerson('${p.id}', '${esc(p.nome)}')" style="display:inline-flex;padding:2px 8px;margin-left:8px;font-size:11px;">🔗 Vincular Perfil</button>`;
     return `<div class="settings-item">
-      <span><span class="color-dot" style="background:${c}"></span>${esc(p)}</span>
-      <button class="btn danger sm" onclick="removePerson('${esc(p)}')">Remover</button>
+      <span><span class="color-dot" style="background:${c}"></span>${esc(p.nome)}${linkLabel}</span>
+      <button class="btn danger sm" onclick="removePerson('${esc(p.nome)}')">Remover</button>
     </div>`;
   }).join('');
   document.getElementById('cards-list').innerHTML = state.cards.map(c => {
@@ -374,4 +380,387 @@ function renderConfig() {
       <button class="btn danger sm" onclick="removeCard('${esc(c)}')">Remover</button>
     </div>`;
   }).join('');
+}
+
+// ── CAIXINHAS ─────────────────────────────────────────
+function renderCaixinhas() {
+  const container = document.getElementById('page-caixinhas');
+  if (!container) return;
+
+  if (!state.caixinhas.length) {
+    container.innerHTML = `
+      <div class="empty-state">
+        <div class="icon">💰</div>
+        <p>Nenhuma caixinha ainda.<br>Crie uma para começar a poupar juntos!</p>
+        <button class="btn primary" style="margin:16px auto 0;display:inline-flex" onclick="openModal('modal-nova-caixinha')">
+          + Nova Caixinha
+        </button>
+      </div>`;
+    return;
+  }
+
+  const cards = state.caixinhas.map(cx => {
+    const total = cx.depositos.reduce((s, d) => s + Number(d.valor), 0);
+    const pct   = cx.meta ? Math.min(100, (total / cx.meta) * 100) : null;
+
+    // Per-person totals
+    const byUser = {};
+    cx.depositos.forEach(d => {
+      byUser[d.user_id] = (byUser[d.user_id] || 0) + Number(d.valor);
+    });
+
+    const userRows = Object.entries(byUser).map(([uid, val]) => {
+      const label = usernameCache[uid] || (uid === currentUser.id ? 'Você' : uid.substring(0,8));
+      return `<div style="display:flex;justify-content:space-between;font-size:12px;padding:4px 0;border-bottom:1px solid var(--border)">
+        <span style="color:var(--text2)">${esc(label)}</span>
+        <span style="font-weight:600;color:var(--green)">R$ ${fmt(val)}</span>
+      </div>`;
+    }).join('');
+
+    // Progress bar
+    const progressHtml = cx.meta ? `
+      <div style="margin:12px 0 4px">
+        <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text3);margin-bottom:5px">
+          <span>Progresso</span>
+          <span>${pct.toFixed(1)}% de R$ ${fmt(cx.meta)}</span>
+        </div>
+        <div style="height:8px;background:var(--bg3);border-radius:20px;overflow:hidden">
+          <div style="height:100%;width:${pct}%;background:var(--accent);border-radius:20px;transition:width 0.4s"></div>
+        </div>
+      </div>` : '';
+
+    // Last 5 deposits
+    const lastDeposits = [...cx.depositos].reverse().slice(0, 5).map(d => {
+      const isMe = d.user_id === currentUser.id;
+      const label = usernameCache[d.user_id] || (isMe ? 'Você' : d.user_id.substring(0,8));
+      return `<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:12px">
+        <div>
+          <span style="color:var(--text2)">${esc(label)}</span>
+          ${d.descricao ? `<span style="color:var(--text3);margin-left:6px">${esc(d.descricao)}</span>` : ''}
+          <div style="font-size:10px;color:var(--text3)">${new Date(d.created_at).toLocaleDateString('pt-BR')}</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="font-weight:600;color:var(--green)">R$ ${fmt(Number(d.valor))}</span>
+          ${isMe ? `<button class="delete-btn" onclick="deletarDeposito('${d.id}','${cx.id}')">✕</button>` : ''}
+        </div>
+      </div>`;
+    }).join('');
+
+    const isCriador = cx.criado_por === currentUser.id;
+
+    return `
+      <div class="table-card" style="margin-bottom:20px">
+        <div class="table-card-header">
+          <h2 style="display:flex;align-items:center;gap:8px;font-family:var(--font-display)">
+            💰 ${esc(cx.nome)}
+          </h2>
+          <div style="display:flex;align-items:center;gap:10px">
+            <div>
+              <span class="total-label">Total:</span>
+              <span class="total-value">R$ ${fmt(total)}</span>
+            </div>
+            ${isCriador ? `<button class="delete-btn" onclick="deletarCaixinha('${cx.id}','${esc(cx.nome)}')" title="Apagar caixinha" style="font-size:16px">🗑</button>` : ''}
+          </div>
+        </div>
+
+        <div style="padding:16px 18px">
+          ${progressHtml}
+
+          ${Object.keys(byUser).length ? `
+            <div style="margin:12px 0 8px;font-size:11px;text-transform:uppercase;letter-spacing:0.5px;color:var(--text3)">Por pessoa</div>
+            ${userRows}
+          ` : ''}
+
+          <div style="margin:16px 0 8px;font-size:11px;text-transform:uppercase;letter-spacing:0.5px;color:var(--text3)">Últimos depósitos</div>
+          ${lastDeposits || '<div style="font-size:12px;color:var(--text3);padding:8px 0">Nenhum depósito ainda.</div>'}
+
+          <div style="margin-top:16px;display:grid;grid-template-columns:1fr 2fr auto;gap:8px;align-items:end">
+            <div class="field">
+              <label>Valor (R$)</label>
+              <input type="number" id="dep-valor-${cx.id}" placeholder="0,00" step="0.01"
+                onkeydown="if(event.key==='Enter')adicionarDeposito('${cx.id}')">
+            </div>
+            <div class="field">
+              <label>Descrição <span class="hint">(opcional)</span></label>
+              <input type="text" id="dep-desc-${cx.id}" placeholder="Ex: Salário, PIX..."
+                onkeydown="if(event.key==='Enter')adicionarDeposito('${cx.id}')">
+            </div>
+            <div class="field">
+              <label>&nbsp;</label>
+              <button class="btn primary" onclick="adicionarDeposito('${cx.id}')">+ Depositar</button>
+            </div>
+          </div>
+        </div>
+      </div>`;
+  }).join('');
+
+  container.innerHTML = `
+    <div style="display:flex;justify-content:flex-end;margin-bottom:20px">
+      <button class="btn primary" onclick="openModal('modal-nova-caixinha')">+ Nova Caixinha</button>
+    </div>
+    ${cards}`;
+}
+
+// ── COMPARTILHADOS ────────────────────────────────────
+function openContasCompartilhadasModal() {
+  const listEl = document.getElementById('contas-compartilhadas-list');
+  if (!listEl) return;
+
+  // Group state.sharedGastos by owner_id
+  const byOwner = {};
+  state.sharedGastos.forEach(g => {
+    byOwner[g.owner_id] = (byOwner[g.owner_id] || 0) + Number(g.valor);
+  });
+
+  listEl.innerHTML = Object.entries(byOwner).map(([ownerId, total]) => {
+    const ownerUsername = usernameCache[ownerId] || ownerId.substring(0, 8);
+    const pc = getColor(state.persons, ownerUsername);
+    return `
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:var(--bg3);border-radius:var(--radius);border:1px solid var(--border);">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <div class="person-avatar" style="background:${pc}22;color:${pc};width:28px;height:28px;font-size:11px;display:flex;align-items:center;justify-content:center;border-radius:50%;font-weight:700;">
+            ${ownerUsername.substring(0,2).toUpperCase()}
+          </div>
+          <span style="font-weight:600;color:var(--text);">${esc(ownerUsername)}</span>
+        </div>
+        <span style="font-weight:700;color:var(--green)">R$ ${fmt(total)}</span>
+      </div>`;
+  }).join('') || '<div style="font-size:12px;color:var(--text3);text-align:center;padding:12px;">Nenhuma conta vinculada.</div>';
+
+  openModal('modal-contas-compartilhadas');
+}
+
+function selectSharedOwner(uid) {
+  state.currentSharedOwner = uid;
+  state.currentSharedYear = null;
+  state.currentSharedMonth = null;
+  state.currentSharedCard = null;
+  renderCompartilhados();
+}
+
+function selectSharedYear(year) {
+  state.currentSharedYear = year;
+  state.currentSharedMonth = null;
+  state.currentSharedCard = null;
+  renderCompartilhados();
+}
+
+function selectSharedMonth(monthId) {
+  state.currentSharedMonth = monthId;
+  state.currentSharedCard = null;
+  renderCompartilhados();
+}
+
+function selectSharedCard(cardName) {
+  state.currentSharedCard = cardName;
+  renderCompartilhados();
+}
+
+function renderCompartilhados() {
+  const container = document.getElementById('page-compartilhados');
+  if (!container) return;
+
+  // Reset badge and update last viewed timestamp
+  localStorage.setItem('last_viewed_shared_gastos', new Date().toISOString());
+  const badge = document.getElementById('badge-compartilhados');
+  if (badge) badge.classList.add('hidden');
+
+  if (!state.sharedGastos || !state.sharedGastos.length) {
+    container.innerHTML = `
+      <div class="empty-state">
+        <div class="icon">🤝</div>
+        <p>Nenhuma despesa compartilhada em outros usuários ainda.</p>
+      </div>`;
+    return;
+  }
+
+  // Group gastos by owner user_id for summary calculations
+  const byOwnerSum = {};
+  state.sharedGastos.forEach(g => {
+    byOwnerSum[g.owner_id] = (byOwnerSum[g.owner_id] || 0) + Number(g.valor);
+  });
+
+  const grandTotal = state.sharedGastos.reduce((s, g) => s + Number(g.valor), 0);
+  const activeAccountsCount = Object.keys(byOwnerSum).length;
+
+  // 1. Resolve and default selections
+  const owners = [...new Set(state.sharedGastos.map(g => g.owner_id))];
+  if (!state.currentSharedOwner || !owners.includes(state.currentSharedOwner)) {
+    state.currentSharedOwner = owners[0] || null;
+  }
+
+  const ownerGastos = state.sharedGastos.filter(g => g.owner_id === state.currentSharedOwner);
+
+  // Group by year
+  const yearsMap = {};
+  ownerGastos.forEach(g => {
+    const monthName = state.sharedMonthsMap[g.mes_id] || 'Outros';
+    const y = extractYear(monthName);
+    if (!yearsMap[y]) yearsMap[y] = [];
+    yearsMap[y].push(g);
+  });
+  const years = Object.keys(yearsMap).sort().reverse();
+
+  if (!state.currentSharedYear || !years.includes(state.currentSharedYear)) {
+    state.currentSharedYear = years[0] || null;
+  }
+
+  // Get months in active year
+  const activeYearGastos = yearsMap[state.currentSharedYear] || [];
+  const monthsMap = {};
+  activeYearGastos.forEach(g => {
+    const monthName = state.sharedMonthsMap[g.mes_id] || 'Outros';
+    monthsMap[g.mes_id] = monthName;
+  });
+
+  const months = Object.entries(monthsMap).map(([id, nome]) => ({ id, nome }));
+  const MESES_PT = [
+    'Janeiro','Fevereiro','Março','Abril','Maio','Junho',
+    'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'
+  ];
+  months.sort((a, b) => {
+    const [ma, ya] = a.nome.split('/');
+    const [mb, yb] = b.nome.split('/');
+    if (ya !== yb) return parseInt(ya) - parseInt(yb);
+    return MESES_PT.indexOf(ma) - MESES_PT.indexOf(mb);
+  });
+
+  if (!state.currentSharedMonth || !months.some(m => m.id === state.currentSharedMonth)) {
+    state.currentSharedMonth = months[months.length - 1]?.id || null;
+  }
+
+  // Filter active month gastos
+  const activeMonthGastos = activeYearGastos.filter(g => g.mes_id === state.currentSharedMonth);
+
+  // Group by cards
+  const cardsMap = {};
+  activeMonthGastos.forEach(g => {
+    cardsMap[g.cartao] = (cardsMap[g.cartao] || 0) + Number(g.valor);
+  });
+  const cardsList = Object.keys(cardsMap).sort();
+
+  if (!state.currentSharedCard || !cardsList.includes(state.currentSharedCard)) {
+    state.currentSharedCard = cardsList[0] || null;
+  }
+
+  const activeCardGastos = activeMonthGastos.filter(g => g.cartao === state.currentSharedCard);
+
+  // 2. Generate HTML elements
+  // Owner tabs
+  const ownerTabsHtml = owners.map(uid => {
+    const name = usernameCache[uid] || uid.substring(0,8);
+    const isActive = uid === state.currentSharedOwner;
+    const pc = getColor(state.persons, name);
+    return `
+      <button class="year-tab${isActive ? ' active' : ''}" 
+        style="${isActive ? `background:${pc};border-color:${pc};color:white;` : `border-color:var(--border);color:var(--text2);`}"
+        onclick="selectSharedOwner('${uid}')">
+        👥 ${esc(name)}
+      </button>`;
+  }).join('');
+
+  // Year tabs
+  const yearTabsHtml = years.map(y => {
+    const isActive = y === state.currentSharedYear;
+    return `
+      <button class="year-tab${isActive ? ' active' : ''}" onclick="selectSharedYear('${y}')">
+        ${y}
+      </button>`;
+  }).join('');
+
+  // Month buttons
+  const monthSelectorHtml = months.map(m => {
+    const isActive = m.id === state.currentSharedMonth;
+    return `
+      <button class="month-btn${isActive ? ' active' : ''}" onclick="selectSharedMonth('${m.id}')">
+        ${esc(m.nome)}
+      </button>`;
+  }).join('');
+
+  // Card chips
+  const cardChipsHtml = cardsList.map(card => {
+    const total = cardsMap[card];
+    const isActive = card === state.currentSharedCard;
+    const color = getColor(state.cards, card);
+    return `
+      <button class="card-chip${isActive ? ' active' : ''}" 
+        style="${isActive ? `border-color:${color};color:${color};background:${color}18;` : ''}"
+        onclick="selectSharedCard('${esc(card)}')">
+        <span class="color-dot" style="background:${color}"></span>
+        ${esc(card)}
+        <span class="chip-total">R$ ${fmt(total)}</span>
+      </button>`;
+  }).join('');
+
+  // Table
+  const totalCard = activeCardGastos.reduce((s, g) => s + Number(g.valor), 0);
+  const tableRowsHtml = activeCardGastos.map(g => {
+    const pLabel = g.parcelas > 1 ? `${g.parcela_atual}/${g.parcelas}x` : 'À vista';
+    return `
+      <tr>
+        <td>${descLabel(g.descricao)}</td>
+        <td style="color:var(--text3)">${pLabel}</td>
+        <td class="amount-cell" style="text-align:right;color:var(--green)">R$ ${fmt(Number(g.valor))}</td>
+      </tr>`;
+  }).join('');
+
+  const tableHtml = activeCardGastos.length ? `
+    <div class="table-card">
+      <div class="table-card-header">
+        <h2>Gastos — ${esc(state.currentSharedCard)}</h2>
+        <div>
+          <span class="total-label">Total do cartão:</span>
+          <span class="total-value" style="color:var(--green)">R$ ${fmt(totalCard)}</span>
+        </div>
+      </div>
+      <div class="scrollable">
+        <table>
+          <thead>
+            <tr>
+              <th>Descrição</th>
+              <th>Parcelas</th>
+              <th style="text-align:right">Valor</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${tableRowsHtml}
+          </tbody>
+        </table>
+      </div>
+    </div>` : `
+    <div class="table-card empty-state">
+      <div class="icon">📋</div>
+      <p>Nenhum gasto neste cartão e mês.</p>
+    </div>`;
+
+  // Render everything to container
+  container.innerHTML = `
+    <div class="summary-grid">
+      <div class="summary-card accent" style="border-color: var(--green);">
+        <div class="s-label">Total em outros usuários</div>
+        <div class="s-value" style="color: var(--green);">R$ ${fmt(grandTotal)}</div>
+        <div class="s-sub">Soma de todos os seus gastos em cartões de amigos</div>
+      </div>
+      <div class="summary-card" onclick="openContasCompartilhadasModal()" style="cursor:pointer;transition:transform 0.15s, border-color 0.15s;border:1px solid var(--border2);" onmouseover="this.style.transform='translateY(-2px)';this.style.borderColor='var(--accent)'" onmouseout="this.style.transform='none';this.style.borderColor='var(--border2)'">
+        <div class="s-label" style="display:flex;align-items:center;justify-content:space-between;">
+          <span>Contas compartilhadas</span>
+          <span style="font-size:10px;color:var(--accent);">🔍 Ver detalhes</span>
+        </div>
+        <div class="s-value">${activeAccountsCount}</div>
+        <div class="s-sub">Usuários que têm gastos no seu nome</div>
+      </div>
+    </div>
+    
+    <div style="margin:20px 0 10px;font-size:11px;text-transform:uppercase;letter-spacing:0.5px;color:var(--text3)">Dono da conta</div>
+    <div class="year-tabs" style="margin-bottom:15px">${ownerTabsHtml}</div>
+
+    <div style="margin:15px 0 10px;font-size:11px;text-transform:uppercase;letter-spacing:0.5px;color:var(--text3)">Ano & Mês</div>
+    <div class="year-tabs">${yearTabsHtml}</div>
+    <div class="month-selector">${monthSelectorHtml}</div>
+
+    <div style="margin:15px 0 10px;font-size:11px;text-transform:uppercase;letter-spacing:0.5px;color:var(--text3)">Cartões de ${esc(usernameCache[state.currentSharedOwner] || '')}</div>
+    <div class="card-chips">${cardChipsHtml}</div>
+
+    ${tableHtml}
+  `;
 }

@@ -6,18 +6,27 @@ function withOwner(obj) {
 // ── LOAD ALL DATA ─────────────────────────────────────
 async function loadAll() {
   const [{ data: pessoas }, { data: cartoes }, { data: meses }] = await Promise.all([
-    db.from('pessoas').select('*').order('created_at'),
-    db.from('cartoes').select('*').order('created_at'),
-    db.from('meses').select('*').order('created_at'),
+    db.from('pessoas').select('*').eq('user_id', currentUser.id).order('created_at'),
+    db.from('cartoes').select('*').eq('user_id', currentUser.id).order('created_at'),
+    db.from('meses').select('*').eq('user_id', currentUser.id).order('created_at'),
   ]);
 
   state.persons = (pessoas || []).map(p => p.nome);
+  state.personsData = pessoas || [];
   state.cards   = (cartoes || []).map(c => c.nome);
   state.months  = meses || [];
 
   // No auto-creation — user creates years manually via the button
 
-  state.currentMonth = state.months[state.months.length - 1]?.id || null;
+  // Try to find current month (e.g. "Junho/2026")
+  const now      = new Date();
+  const mesesPt  = [
+    'Janeiro','Fevereiro','Março','Abril','Maio','Junho',
+    'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'
+  ];
+  const nomeMes  = `${mesesPt[now.getMonth()]}/${now.getFullYear()}`;
+  const found    = state.months.find(m => m.nome.toLowerCase() === nomeMes.toLowerCase());
+  state.currentMonth = found?.id || state.months[state.months.length - 1]?.id || null;
   state.currentCard  = state.cards[0] || null;
 
   if (state.currentMonth) await loadGastos();
@@ -31,6 +40,7 @@ async function loadGastos() {
   const { data } = await db
     .from('gastos')
     .select('*')
+    .eq('user_id', currentUser.id)
     .eq('mes_id', state.currentMonth)
     .order('created_at');
   state.gastos = data || [];
@@ -63,6 +73,14 @@ async function createYearSilent(year) {
   state.months.sort((a,b) => new Date(a.created_at) - new Date(b.created_at));
 
   return data.length;
+}
+
+function openNewYearModal() {
+  const input = document.getElementById('modal-year-input');
+  if (input) {
+    input.value = new Date().getFullYear();
+  }
+  openModal('modal-new-year');
 }
 
 // Called from modal button
@@ -326,11 +344,171 @@ async function saveEdit() {
 async function addPerson() {
   const name = document.getElementById('new-person').value.trim();
   if (!name || state.persons.includes(name)) return;
-  const { error } = await db.from('pessoas').insert(withOwner({ nome: name }));
-  if (error) { toast('Erro ao adicionar.', 'error'); return; }
+
+  setSyncStatus(false);
+
+  const { data: inserted, error } = await db
+    .from('pessoas')
+    .insert(withOwner({ nome: name, vinculo_user_id: null }))
+    .select()
+    .single();
+
+  setSyncStatus(true);
+
+  if (error || !inserted) { toast('Erro ao adicionar.', 'error'); return; }
+
   state.persons.push(name);
+  state.personsData.push(inserted);
   document.getElementById('new-person').value = '';
   toast(`${name} adicionada!`, 'success');
+  renderConfig();
+}
+
+async function addFriendPerson() {
+  const username = document.getElementById('friend-username').value.trim().toLowerCase();
+  if (!username) { toast('Preencha o username.', 'error'); return; }
+
+  const btn = document.getElementById('btn-add-friend');
+  btn.disabled = true; btn.textContent = 'Vinculando...';
+  setSyncStatus(false);
+
+  // 1. Search for profile
+  const { data: profile, error: pError } = await db
+    .from('profiles')
+    .select('id, username')
+    .ilike('username', username)
+    .maybeSingle();
+
+  if (pError) {
+    console.error("Erro ao pesquisar perfil do amigo:", pError);
+    toast("Erro no banco ao pesquisar usuário.", "error");
+    btn.disabled = false; btn.textContent = 'Vincular';
+    setSyncStatus(true);
+    return;
+  }
+
+  if (!profile) {
+    toast(`Usuário "${username}" não encontrado.`, 'error');
+    btn.disabled = false; btn.textContent = 'Vincular';
+    setSyncStatus(true);
+    return;
+  }
+
+  // Ensure we don't duplicate names in state.persons (comparing case-insensitive)
+  const displayName = capitalize(profile.username);
+  if (state.persons.map(p => p.toLowerCase()).includes(displayName.toLowerCase())) {
+    toast(`Você já possui uma pessoa com o nome "${displayName}".`, 'warning');
+    btn.disabled = false; btn.textContent = 'Vincular';
+    setSyncStatus(true);
+    return;
+  }
+
+  // 2. Insert into pessoas table
+  const { data: inserted, error } = await db
+    .from('pessoas')
+    .insert(withOwner({ nome: displayName, vinculo_user_id: profile.id }))
+    .select()
+    .single();
+
+  btn.disabled = false; btn.textContent = 'Vincular';
+  setSyncStatus(true);
+
+  if (error || !inserted) {
+    toast('Erro ao vincular amigo.', 'error');
+    return;
+  }
+
+  state.persons.push(inserted.nome);
+  state.personsData.push(inserted);
+  document.getElementById('friend-username').value = '';
+  closeModal('modal-add-friend');
+  toast(`${inserted.nome} vinculado com sucesso!`, 'success');
+  renderConfig();
+}
+
+async function startLinkPerson(personId, oldName) {
+  const username = prompt(`Digite o username do perfil ativo para vincular a "${oldName}":`);
+  if (!username) return;
+  const cleanUsername = username.trim().toLowerCase();
+
+  setSyncStatus(false);
+
+  // 1. Search for profile
+  const { data: profile, error: pError } = await db
+    .from('profiles')
+    .select('id, username')
+    .ilike('username', cleanUsername)
+    .maybeSingle();
+
+  if (pError) {
+    console.error("Erro ao pesquisar perfil:", pError);
+    toast("Erro ao pesquisar usuário.", "error");
+    setSyncStatus(true);
+    return;
+  }
+
+  if (!profile) {
+    toast(`Usuário "${cleanUsername}" não encontrado.`, "error");
+    setSyncStatus(true);
+    return;
+  }
+
+  const newName = capitalize(profile.username);
+
+  // Check if newName already exists (other than this personId) to prevent name collisions
+  const exists = state.personsData.some(p => p.id !== personId && p.nome.toLowerCase() === newName.toLowerCase());
+  if (exists) {
+    toast(`Já existe outra pessoa cadastrada com o nome "${newName}".`, "warning");
+    setSyncStatus(true);
+    return;
+  }
+
+  // 2. Update pessoas table
+  const { data: updatedPerson, error: updateError } = await db
+    .from('pessoas')
+    .update({ nome: newName, vinculo_user_id: profile.id })
+    .eq('id', personId)
+    .select()
+    .single();
+
+  if (updateError || !updatedPerson) {
+    toast("Erro ao atualizar vínculo.", "error");
+    setSyncStatus(true);
+    return;
+  }
+
+  // 3. Update existing gastos to new name if it changed
+  if (oldName !== newName) {
+    const { error: errorGastos } = await db
+      .from('gastos')
+      .update({ pessoa: newName })
+      .eq('pessoa', oldName)
+      .eq('user_id', currentUser.id);
+
+    if (errorGastos) {
+      console.error("Erro ao transferir despesas:", errorGastos);
+    }
+  }
+
+  // 4. Update local state
+  // Update state.persons
+  const idxName = state.persons.indexOf(oldName);
+  if (idxName !== -1) state.persons[idxName] = newName;
+
+  // Update state.personsData
+  const idxData = state.personsData.findIndex(p => p.id === personId);
+  if (idxData !== -1) state.personsData[idxData] = updatedPerson;
+
+  // If name changed, update names in state.gastos (so UI updates without reloading)
+  if (oldName !== newName) {
+    state.gastos.forEach(g => {
+      if (g.pessoa === oldName) g.pessoa = newName;
+    });
+  }
+
+  setSyncStatus(true);
+  toast(`"${oldName}" vinculada com sucesso a @${profile.username}!`, "success");
+  
   renderConfig();
 }
 
@@ -339,6 +517,7 @@ async function removePerson(name) {
   const { error } = await db.from('pessoas').delete().eq('nome', name);
   if (error) { toast('Erro.', 'error'); return; }
   state.persons = state.persons.filter(p => p !== name);
+  state.personsData = state.personsData.filter(p => p.nome !== name);
   toast('Removida.');
   renderConfig();
 }
@@ -397,4 +576,254 @@ async function ensureCard(name) {
   if (!name || state.cards.includes(name)) return;
   await db.from('cartoes').insert(withOwner({ nome: name }));
   state.cards.push(name);
+}
+
+// ── CAIXINHAS ─────────────────────────────────────────
+async function loadCaixinhas() {
+  const { data: caixinhas } = await db
+    .from('caixinhas')
+    .select('*')
+    .order('created_at');
+
+  if (!caixinhas || !caixinhas.length) {
+    state.caixinhas = [];
+    return;
+  }
+
+  const ids = caixinhas.map(c => c.id);
+
+  const [{ data: membros }, { data: depositos }] = await Promise.all([
+    db.from('caixinha_membros').select('*').in('caixinha_id', ids),
+    db.from('caixinha_depositos').select('*').in('caixinha_id', ids).order('created_at'),
+  ]);
+
+  state.caixinhas = caixinhas.map(c => ({
+    ...c,
+    membros:   (membros   || []).filter(m => m.caixinha_id === c.id),
+    depositos: (depositos || []).filter(d => d.caixinha_id === c.id),
+  }));
+
+  // Pre-resolve all usernames for display
+  await resolveAllUsernames(state.caixinhas);
+}
+
+async function createCaixinha() {
+  const nome  = document.getElementById('cx-nome').value.trim();
+  const meta  = parseFloat(document.getElementById('cx-meta').value) || null;
+  const usernameAmigo = document.getElementById('cx-amigo').value.trim().toLowerCase();
+
+  if (!nome) { toast('Dê um nome à caixinha.', 'error'); return; }
+
+  const btn = document.getElementById('btn-criar-caixinha');
+  btn.disabled = true; btn.textContent = 'Criando...';
+
+  // Insert caixinha
+  const { data: cx, error } = await db.from('caixinhas').insert({
+    nome,
+    meta:       meta || null,
+    criado_por: currentUser.id,
+    user_id:    currentUser.id,
+  }).select().single();
+
+  if (error || !cx) {
+    console.error("Erro ao criar caixinha:", error);
+    toast('Erro ao criar caixinha.', 'error');
+    btn.disabled = false; btn.textContent = 'Criar';
+    return;
+  }
+
+  // Add self as member
+  await db.from('caixinha_membros').insert({ caixinha_id: cx.id, user_id: currentUser.id });
+
+  // Add friend if provided
+  if (usernameAmigo) {
+    const { data: profile, error: pError } = await db
+      .from('profiles')
+      .select('id')
+      .ilike('username', usernameAmigo)
+      .maybeSingle();
+
+    if (pError) {
+      console.error("Erro ao buscar perfil do amigo na caixinha:", pError);
+    }
+
+    if (profile) {
+      await db.from('caixinha_membros').insert({ caixinha_id: cx.id, user_id: profile.id });
+    } else {
+      toast(`Usuário "${usernameAmigo}" não encontrado — caixinha criada sem ele.`, 'warning');
+    }
+  }
+
+  btn.disabled = false; btn.textContent = 'Criar';
+  closeModal('modal-nova-caixinha');
+  await loadCaixinhas();
+  toast(`Caixinha "${nome}" criada!`, 'success');
+  renderCaixinhas();
+}
+
+async function adicionarDeposito(caixinhaId) {
+  const valorEl = document.getElementById('dep-valor-' + caixinhaId);
+  const descEl  = document.getElementById('dep-desc-'  + caixinhaId);
+  const valor   = parseFloat(valorEl?.value);
+  const descricao = descEl?.value.trim() || '';
+
+  if (isNaN(valor) || valor <= 0) { toast('Valor inválido.', 'error'); return; }
+
+  const { error } = await db.from('caixinha_depositos').insert({
+    caixinha_id: caixinhaId,
+    user_id:     currentUser.id,
+    valor,
+    descricao,
+  });
+
+  if (error) { toast('Erro ao depositar.', 'error'); return; }
+
+  if (valorEl) valorEl.value = '';
+  if (descEl)  descEl.value  = '';
+
+  await loadCaixinhas();
+  toast('Depósito registrado!', 'success');
+  renderCaixinhas();
+}
+
+async function deletarDeposito(depositoId, caixinhaId) {
+  if (!confirm('Remover este depósito?')) return;
+  const { error } = await db.from('caixinha_depositos').delete().eq('id', depositoId);
+  if (error) { toast('Erro ao remover.', 'error'); return; }
+  await loadCaixinhas();
+  toast('Depósito removido.');
+  renderCaixinhas();
+}
+
+async function deletarCaixinha(id, nome) {
+  if (!confirm(`Apagar a caixinha "${nome}" e todos os depósitos? Esta ação não pode ser desfeita.`)) return;
+  await db.from('caixinha_depositos').delete().eq('caixinha_id', id);
+  await db.from('caixinha_membros').delete().eq('caixinha_id', id);
+  await db.from('caixinhas').delete().eq('id', id);
+  state.caixinhas = state.caixinhas.filter(c => c.id !== id);
+  toast(`"${nome}" apagada.`);
+  renderCaixinhas();
+}
+
+// ── USERNAME CACHE ────────────────────────────────────
+// Maps user_id → username for display in caixinhas
+const usernameCache = {};
+
+async function resolveUsername(userId) {
+  if (usernameCache[userId]) return usernameCache[userId];
+  if (userId === currentUser.id) {
+    const me = document.getElementById('user-display')?.textContent || 'Você';
+    usernameCache[userId] = me;
+    return me;
+  }
+  const { data } = await db
+    .from('profiles')
+    .select('username')
+    .eq('id', userId)
+    .maybeSingle();
+  const name = data?.username || userId.substring(0, 8);
+  usernameCache[userId] = name;
+  return name;
+}
+
+async function resolveAllUsernames(caixinhas) {
+  const ids = new Set();
+  caixinhas.forEach(cx => {
+    cx.membros.forEach(m => ids.add(m.user_id));
+    cx.depositos.forEach(d => ids.add(d.user_id));
+  });
+  await Promise.all([...ids].map(id => resolveUsername(id)));
+}
+
+// ── SHARED EXPENSES (COMPARTILHADOS) ──────────────────
+async function loadSharedGastos() {
+  if (!currentUser) return;
+
+  // 1. Load the linked persons
+  const { data: linkedPessoas, error: errP } = await db
+    .from('pessoas')
+    .select('id, nome, user_id')
+    .eq('vinculo_user_id', currentUser.id);
+
+  if (errP || !linkedPessoas) {
+    state.sharedGastos = [];
+    state.sharedPessoas = [];
+    return;
+  }
+
+  state.sharedPessoas = linkedPessoas;
+
+  if (linkedPessoas.length === 0) {
+    state.sharedGastos = [];
+    return;
+  }
+
+  // 2. Fetch all shared expenses (gastos)
+  const queries = linkedPessoas.map(p =>
+    db.from('gastos')
+      .select('*')
+      .eq('user_id', p.user_id)
+      .eq('pessoa', p.nome)
+  );
+
+  const results = await Promise.all(queries);
+
+  let allGastos = [];
+  results.forEach((res, index) => {
+    if (res.data) {
+      const p = linkedPessoas[index];
+      res.data.forEach(g => {
+        g.owner_id = p.user_id;
+        g.owner_person_name = p.nome;
+      });
+      allGastos = allGastos.concat(res.data);
+    }
+  });
+
+  // Sort shared gastos by created_at descending
+  allGastos.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+  state.sharedGastos = allGastos;
+
+  // 3. Resolve all owners months
+  const ownerIds = [...new Set(linkedPessoas.map(p => p.user_id))];
+  const { data: sharedMonths } = await db.from('meses').select('*').in('user_id', ownerIds);
+  state.sharedMonthsMap = {};
+  if (sharedMonths) {
+    sharedMonths.forEach(m => {
+      state.sharedMonthsMap[m.id] = m.nome;
+    });
+  }
+
+  // 4. Check for notifications
+  checkNewSharedExpenses(allGastos);
+
+  // 5. Resolve usernames of the owners
+  await Promise.all(ownerIds.map(id => resolveUsername(id)));
+}
+
+function checkNewSharedExpenses(allGastos) {
+  const lastViewed = localStorage.getItem('last_viewed_shared_gastos');
+  if (!lastViewed) {
+    // If they have never viewed, set it to now and don't spam them on first load
+    localStorage.setItem('last_viewed_shared_gastos', new Date().toISOString());
+    return;
+  }
+
+  const lastViewedDate = new Date(lastViewed);
+  const newGastos = allGastos.filter(g => new Date(g.created_at) > lastViewedDate);
+
+  const badge = document.getElementById('badge-compartilhados');
+  if (badge) {
+    if (newGastos.length > 0) {
+      badge.textContent = newGastos.length;
+      badge.classList.remove('hidden');
+
+      // Also show a toast if not on the page itself
+      if (currentPage !== 'compartilhados') {
+        toast(`🔔 Você tem ${newGastos.length} novas despesas lançadas no seu nome!`, 'success');
+      }
+    } else {
+      badge.classList.add('hidden');
+    }
+  }
 }

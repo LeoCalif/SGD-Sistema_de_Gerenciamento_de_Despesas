@@ -6,6 +6,8 @@ async function checkSession() {
     const username = await getUsernameById(session.user.id);
     showApp(username || session.user.email);
     await loadAll();
+    await loadCaixinhas();
+    await loadSharedGastos();
   } else {
     showLogin();
   }
@@ -27,10 +29,18 @@ async function doLogin() {
   const { data: profile, error: profileErr } = await db
     .from('profiles')
     .select('id')
-    .eq('username', username)
+    .ilike('username', username)
     .maybeSingle();
 
-  if (profileErr || !profile) {
+  if (profileErr) {
+    console.error("Erro ao resolver username:", profileErr);
+    btn.disabled    = false;
+    btn.textContent = 'Entrar';
+    showLoginError('Erro ao consultar banco de dados.');
+    return;
+  }
+
+  if (!profile) {
     btn.disabled    = false;
     btn.textContent = 'Entrar';
     showLoginError('Usuário não encontrado.');
@@ -62,6 +72,8 @@ async function doLogin() {
   currentUser = data.user;
   showApp(username);
   await loadAll();
+  await loadCaixinhas();
+  await loadSharedGastos();
 }
 
 async function doLogout() {

@@ -62,6 +62,11 @@
         <span class="badge" id="badge-pessoas">0</span>
       </button>
       <button class="nav-item" onclick="goTo('cartoes-view')"><span>💳</span> Por Cartão</button>
+      <button class="nav-item" onclick="goTo('caixinhas')"><span>💰</span> Caixinhas</button>
+      <button class="nav-item" onclick="goTo('compartilhados')">
+        <span>🤝</span> Em Outros
+        <span class="badge hidden" id="badge-compartilhados" style="background:var(--amber);color:var(--bg)">0</span>
+      </button>
       <button class="nav-item" onclick="goTo('config')"><span>⚙️</span> Configurações</button>
     </div>
     <div class="sidebar-footer">
@@ -88,7 +93,7 @@
         <button class="btn" onclick="openImportModal()">⬆ Importar</button>
         <button class="btn" onclick="exportCSV()">⬇ CSV</button>
         <button class="btn" id="btn-pdf-pessoa" onclick="exportPessoaPDF()" style="display:none">🖨 PDF</button>
-        <button class="btn primary" onclick="openNewMonthModal()" id="btn-new-month">+ Novo Mês</button>
+        <button class="btn primary" onclick="openNewYearModal()" id="btn-new-year">+ Novo Ano</button>
       </div>
     </div>
 
@@ -181,14 +186,23 @@
         <div id="cards-detail"></div>
       </div>
 
+      <!-- ─── CAIXINHAS ─── -->
+      <div id="page-caixinhas" class="hidden"></div>
+
+      <!-- ─── COMPARTILHADOS ─── -->
+      <div id="page-compartilhados" class="hidden"></div>
+
       <!-- ─── CONFIG ─── -->
       <div id="page-config" class="hidden">
         <div class="settings-grid">
           <div class="settings-card">
-            <h3>👤 Pessoas</h3>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+              <h3 style="margin:0">👤 Pessoas</h3>
+              <button class="btn primary sm" onclick="openModal('modal-add-friend')">🤝 Vincular Amigo</button>
+            </div>
             <div id="persons-list"></div>
             <div class="settings-add">
-              <input type="text" id="new-person" placeholder="Nome da pessoa..."
+              <input type="text" id="new-person" placeholder="Nome genérico (ex: Mãe)..."
                 onkeydown="if(event.key==='Enter')addPerson()">
               <button class="btn primary sm" onclick="addPerson()">Adicionar</button>
             </div>
@@ -215,18 +229,53 @@
 
 <!-- ══ MODALS ══ -->
 
-<!-- Novo Mês -->
-<div class="modal-overlay hidden" id="modal-new-month">
+<!-- Novo Ano -->
+<div class="modal-overlay hidden" id="modal-new-year">
   <div class="modal">
-    <h3>Novo mês</h3>
+    <h3>Novo Ano</h3>
     <div class="field">
-      <label>Nome (ex: Junho/2025)</label>
-      <input type="text" id="modal-month-name" placeholder="Junho/2025"
-        onkeydown="if(event.key==='Enter')createMonth()">
+      <label>Ano (ex: 2026)</label>
+      <input type="number" id="modal-year-input" placeholder="2026" min="2000" max="2100"
+        onkeydown="if(event.key==='Enter')createYear()">
     </div>
     <div class="modal-actions">
-      <button class="btn" onclick="closeModal('modal-new-month')">Cancelar</button>
-      <button class="btn primary" onclick="createMonth()">Criar</button>
+      <button class="btn" onclick="closeModal('modal-new-year')">Cancelar</button>
+      <button class="btn primary" id="btn-create-year" onclick="createYear()">Criar Ano</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Vincular Amigo -->
+<div class="modal-overlay hidden" id="modal-add-friend">
+  <div class="modal">
+    <h3>🤝 Vincular Perfil Ativo</h3>
+    <p style="font-size:12px;color:var(--text3);margin-bottom:14px">
+      Digite o nome de usuário (username) exato do seu amigo cadastrado no sistema para vincular e compartilhar gastos.
+    </p>
+    <div class="field">
+      <label>Username do amigo</label>
+      <input type="text" id="friend-username" placeholder="Ex: danny"
+        onkeydown="if(event.key==='Enter')addFriendPerson()">
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal('modal-add-friend')">Cancelar</button>
+      <button class="btn primary" id="btn-add-friend" onclick="addFriendPerson()">Vincular</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Contas Compartilhadas -->
+<div class="modal-overlay hidden" id="modal-contas-compartilhadas">
+  <div class="modal">
+    <h3>🤝 Contas Compartilhadas</h3>
+    <p style="font-size:12px;color:var(--text3);margin-bottom:14px">
+      Lista de usuários em cujos cartões você possui despesas vinculadas e o respectivo valor total.
+    </p>
+    <div id="contas-compartilhadas-list" style="display:flex;flex-direction:column;gap:10px;">
+      <!-- Dynamic rows will be inserted here -->
+    </div>
+    <div class="modal-actions" style="margin-top:20px;">
+      <button class="btn primary" onclick="closeModal('modal-contas-compartilhadas')">Fechar</button>
     </div>
   </div>
 </div>
@@ -295,6 +344,30 @@
       <button class="btn primary" id="btn-confirm-import" disabled onclick="confirmImport()">
         Confirmar importação
       </button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Nova Caixinha -->
+<div class="modal-overlay hidden" id="modal-nova-caixinha">
+  <div class="modal">
+    <h3>💰 Nova Caixinha</h3>
+    <div class="field">
+      <label>Nome da caixinha</label>
+      <input type="text" id="cx-nome" placeholder="Ex: Viagem, Celular, Reserva..."
+        onkeydown="if(event.key==='Enter')createCaixinha()">
+    </div>
+    <div class="field">
+      <label>Meta (R$) <span class="hint">(opcional)</span></label>
+      <input type="number" id="cx-meta" placeholder="Ex: 10000" step="0.01">
+    </div>
+    <div class="field">
+      <label>Convidar usuário <span class="hint">(opcional — ex: danny)</span></label>
+      <input type="text" id="cx-amigo" placeholder="username do participante">
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal('modal-nova-caixinha')">Cancelar</button>
+      <button class="btn primary" id="btn-criar-caixinha" onclick="createCaixinha()">Criar</button>
     </div>
   </div>
 </div>

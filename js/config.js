@@ -23,5 +23,7 @@ const TITLES = {
   lancamento:     ['Lançamentos',    'Adicione gastos por cartão e pessoa'],
   resumo:         ['Por Pessoa',     'Totais e detalhes de cada pessoa'],
   'cartoes-view': ['Por Cartão',     'Totais e gastos por cartão'],
+  caixinhas:      ['💰 Caixinhas',   'Poupanças e metas compartilhadas'],
+  compartilhados: ['🤝 Em Outros',   'Suas despesas lançadas nos cartões de outras pessoas'],
   config:         ['Configurações',  'Gerencie pessoas e cartões'],
 };

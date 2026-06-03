@@ -62,6 +62,24 @@ document.addEventListener('keydown', (e) => {
 function updateBadges() {
   const el = document.getElementById('badge-pessoas');
   if (el) el.textContent = new Set(state.gastos.map(g => g.pessoa)).size;
+
+  // Update shared gastos badge
+  const lastViewed = localStorage.getItem('last_viewed_shared_gastos');
+  const badgeCompartilhados = document.getElementById('badge-compartilhados');
+  if (badgeCompartilhados) {
+    if (!lastViewed) {
+      badgeCompartilhados.classList.add('hidden');
+    } else {
+      const lastViewedDate = new Date(lastViewed);
+      const newGastosCount = (state.sharedGastos || []).filter(g => new Date(g.created_at) > lastViewedDate).length;
+      if (newGastosCount > 0) {
+        badgeCompartilhados.textContent = newGastosCount;
+        badgeCompartilhados.classList.remove('hidden');
+      } else {
+        badgeCompartilhados.classList.add('hidden');
+      }
+    }
+  }
 }
 
 // ── DESC LABEL ────────────────────────────────────────
