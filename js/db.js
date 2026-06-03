@@ -948,3 +948,170 @@ function checkNewSharedExpenses(allGastos) {
     }
   }
 }
+
+// ── USER ROLE MANAGEMENT (ADMIN ONLY) ──────────────────
+async function changeUserRole(userId, newRole) {
+  if (userId === currentUser.id) {
+    toast('Você não pode alterar seu próprio papel por segurança.', 'error');
+    return;
+  }
+
+  const { error } = await db
+    .from('profiles')
+    .update({ role: newRole })
+    .eq('id', userId);
+
+  if (error) {
+    console.error("Erro ao alterar papel do usuário:", error);
+    toast('Erro ao alterar papel do usuário.', 'error');
+    return;
+  }
+
+  toast('Papel do usuário atualizado!', 'success');
+  if (typeof renderAdminPanel === 'function') {
+    renderAdminPanel();
+  }
+}
+
+async function adicionarNovoUsuario() {
+  const username = document.getElementById('adm-new-username').value.trim();
+  const email = document.getElementById('adm-new-email').value.trim();
+  const password = document.getElementById('adm-new-password').value;
+
+  if (!username || !email || !password) {
+    toast('Preencha todos os campos do novo usuário.', 'error');
+    return;
+  }
+
+  if (password.length < 6) {
+    toast('A senha deve ter no mínimo 6 caracteres.', 'error');
+    return;
+  }
+
+  const btn = document.getElementById('adm-new-user-btn');
+  btn.disabled = true; btn.textContent = 'Criando...';
+
+  try {
+    // 1. Create a temporary client with no persistence
+    const tempDb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false
+      }
+    });
+
+    // 2. Sign up the user via standard auth API
+    const { data: authData, error: authErr } = await tempDb.auth.signUp({
+      email,
+      password
+    });
+
+    if (authErr || !authData?.user) {
+      throw new Error(authErr?.message || 'Erro ao registrar credenciais.');
+    }
+
+    const newUserId = authData.user.id;
+
+    // 3. Call SQL function to confirm email
+    const { error: confirmErr } = await db.rpc('confirm_user_email', { user_email: email });
+    if (confirmErr) {
+      console.warn("Aviso ao confirmar e-mail:", confirmErr);
+    }
+
+    // 4. Insert profile row
+    const { error: profileErr } = await db.from('profiles').insert({
+      id: newUserId,
+      username: username,
+      role: 'user',
+      ativo: true
+    });
+
+    if (profileErr) {
+      throw new Error(profileErr.message);
+    }
+
+    // Clear fields
+    document.getElementById('adm-new-username').value = '';
+    document.getElementById('adm-new-email').value = '';
+    document.getElementById('adm-new-password').value = '';
+
+    toast(`Usuário "${username}" cadastrado!`, 'success');
+    if (typeof renderAdminPanel === 'function') {
+      renderAdminPanel();
+    }
+  } catch (err) {
+    console.error("Erro ao cadastrar usuário:", err);
+    toast('Erro ao cadastrar: ' + err.message, 'error');
+  } finally {
+    btn.disabled = false; btn.textContent = 'Criar';
+  }
+}
+
+async function toggleUserActiveStatus(userId, currentStatus) {
+  if (userId === currentUser.id) {
+    toast('Você não pode desativar seu próprio usuário.', 'error');
+    return;
+  }
+
+  const newStatus = !currentStatus;
+  const { error } = await db
+    .from('profiles')
+    .update({ ativo: newStatus })
+    .eq('id', userId);
+
+  if (error) {
+    console.error("Erro ao alterar status do usuário:", error);
+    toast('Erro ao alterar status.', 'error');
+    return;
+  }
+
+  toast(newStatus ? 'Usuário ativado!' : 'Usuário inativado!', 'success');
+  if (typeof renderAdminPanel === 'function') {
+    renderAdminPanel();
+  }
+}
+
+async function deletarUsuarioPeloAdmin(userId, username) {
+  if (userId === currentUser.id) {
+    toast('Você não pode excluir seu próprio usuário.', 'error');
+    return;
+  }
+
+  if (!confirm(`Tem certeza absoluta de que deseja excluir o usuário "${username}" e TODOS os seus gastos, cartões e dados permanentemente? Esta ação não pode ser desfeita.`)) {
+    return;
+  }
+
+  const { error } = await db.rpc('delete_user_by_admin', { target_user_id: userId });
+
+  if (error) {
+    console.error("Erro ao deletar usuário:", error);
+    toast('Erro ao excluir usuário.', 'error');
+    return;
+  }
+
+  toast(`Usuário "${username}" excluído.`, 'success');
+  if (typeof renderAdminPanel === 'function') {
+    renderAdminPanel();
+  }
+}
+
+async function changeUserPassword() {
+  const newPwd = document.getElementById('change-pwd-new').value;
+  const confirmPwd = document.getElementById('change-pwd-confirm').value;
+
+  if (!newPwd) { toast('Digite a nova senha.', 'error'); return; }
+  if (confirmPwd !== newPwd) { toast('As senhas não coincidem.', 'error'); return; }
+  if (newPwd.length < 6) { toast('A senha deve ter no mínimo 6 caracteres.', 'error'); return; }
+
+  const { error } = await db.auth.updateUser({ password: newPwd });
+
+  if (error) {
+    console.error("Erro ao alterar senha:", error);
+    toast('Erro ao alterar senha: ' + error.message, 'error');
+    return;
+  }
+
+  document.getElementById('change-pwd-new').value = '';
+  document.getElementById('change-pwd-confirm').value = '';
+  toast('Senha alterada com sucesso!', 'success');
+}

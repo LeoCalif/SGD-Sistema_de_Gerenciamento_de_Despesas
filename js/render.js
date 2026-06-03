@@ -380,6 +380,74 @@ function renderConfig() {
       <button class="btn danger sm" onclick="removeCard('${esc(c)}')">Remover</button>
     </div>`;
   }).join('');
+
+  // Painel de administrador (se o usuário for admin)
+  const isAdmin = currentUser && currentUser.role === 'admin';
+  const adminCard = document.getElementById('admin-settings-card');
+  if (adminCard) {
+    adminCard.classList.toggle('hidden', !isAdmin);
+    if (isAdmin) {
+      renderAdminPanel();
+    }
+  }
+}
+
+async function renderAdminPanel() {
+  const listEl = document.getElementById('admin-users-list');
+  if (!listEl) return;
+
+  listEl.innerHTML = `<div style="text-align:center;color:var(--text3);padding:10px 0;font-size:12px;">Carregando usuários...</div>`;
+
+  const { data: users, error } = await db
+    .from('profiles')
+    .select('id, username, role, ativo')
+    .order('username');
+
+  if (error) {
+    console.error("Erro ao carregar lista de usuários:", error);
+    listEl.innerHTML = `<div style="color:var(--red);font-size:12px;">Erro ao carregar lista de usuários.</div>`;
+    return;
+  }
+
+  if (!users || !users.length) {
+    listEl.innerHTML = `<div style="color:var(--text3);font-size:12px;">Nenhum usuário cadastrado.</div>`;
+    return;
+  }
+
+  listEl.innerHTML = users.map(u => {
+    const isMe = u.id === currentUser.id;
+    const isAtivo = u.ativo !== false;
+    const selectDisabled = isMe ? 'disabled' : '';
+    
+    const activeBtnText = isAtivo ? 'Inativar' : 'Ativar';
+    const activeBtnClass = isAtivo ? 'btn sm warning' : 'btn sm success';
+    
+    const statusBadge = isAtivo 
+      ? `<span style="font-size:10px; color:var(--green); background:rgba(74,222,128,0.1); padding:2px 6px; border-radius:10px; font-weight:600; margin-left:6px;">Ativo</span>`
+      : `<span style="font-size:10px; color:var(--red); background:rgba(248,113,113,0.1); padding:2px 6px; border-radius:10px; font-weight:600; margin-left:6px;">Inativo</span>`;
+
+    return `
+      <div class="settings-item" style="display:flex; flex-direction:column; padding:12px 0; border-bottom:1px solid var(--border)">
+        <div style="display:flex; align-items:center; gap:8px; min-width:0; flex-wrap:wrap;">
+          <span style="font-size:14px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">👤 <strong>${esc(u.username)}</strong></span>
+          ${statusBadge}
+          ${isMe ? `<span style="font-size:10px; color:var(--accent); background:var(--accent-glow); padding:2px 6px; border-radius:10px; font-weight:600;">Você</span>` : ''}
+        </div>
+        
+        <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:6px; justify-content:flex-start;">
+          <select onchange="changeUserRole('${u.id}', this.value)" ${selectDisabled} style="padding:4px 8px; font-size:11px; background:var(--bg3); border:1px solid var(--border); border-radius:var(--radius); color:var(--text); outline:none; height:28px;">
+            <option value="user" ${u.role === 'user' ? 'selected' : ''}>Usuário Comum</option>
+            <option value="admin" ${u.role === 'admin' ? 'selected' : ''}>Administrador</option>
+          </select>
+
+          ${!isMe ? `
+            <button class="${activeBtnClass}" onclick="toggleUserActiveStatus('${u.id}', ${isAtivo})" style="padding:4px 10px; font-size:11px; height:28px; display:inline-flex; align-items:center; justify-content:center;">${activeBtnText}</button>
+            <button class="btn sm danger" onclick="deletarUsuarioPeloAdmin('${u.id}', '${esc(u.username)}')" style="padding:4px 10px; font-size:11px; height:28px; display:inline-flex; align-items:center; justify-content:center;">🗑 Excluir</button>
+          ` : ''}
+        </div>
+      </div>
+    `;
+  }).join('');
 }
 
 // ── CAIXINHAS ─────────────────────────────────────────

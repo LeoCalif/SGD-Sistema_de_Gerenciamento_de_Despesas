@@ -3,8 +3,20 @@ async function checkSession() {
   const { data: { session } } = await db.auth.getSession();
   if (session) {
     currentUser = session.user;
-    const username = await getUsernameById(session.user.id);
-    showApp(username || session.user.email);
+    const profile = await getProfileById(session.user.id);
+    
+    // Check if user is active
+    if (profile && profile.ativo === false) {
+      toast('Sua conta está inativa. Contate o administrador.', 'error');
+      await db.auth.signOut();
+      currentUser = null;
+      showLogin();
+      return;
+    }
+
+    currentUser.username = profile?.username || session.user.email;
+    currentUser.role = profile?.role || 'user';
+    showApp(currentUser.username);
     await loadAll();
     await loadCaixinhas();
     await loadSharedGastos();
@@ -12,6 +24,8 @@ async function checkSession() {
     showLogin();
   }
 }
+
+
 
 async function doLogin() {
   const username = document.getElementById('login-username').value.trim();
@@ -70,7 +84,19 @@ async function doLogin() {
   if (error) { showLoginError('Usuário ou senha incorretos.'); return; }
 
   currentUser = data.user;
-  showApp(username);
+  const userProfile = await getProfileById(data.user.id);
+
+  // Check if user is active
+  if (userProfile && userProfile.ativo === false) {
+    showLoginError('Sua conta está inativa. Contate o administrador.');
+    await db.auth.signOut();
+    currentUser = null;
+    return;
+  }
+
+  currentUser.username = userProfile?.username || data.user.email;
+  currentUser.role = userProfile?.role || 'user';
+  showApp(currentUser.username);
   await loadAll();
   await loadCaixinhas();
   await loadSharedGastos();
@@ -91,13 +117,18 @@ async function doLogout() {
   toast('Sessão encerrada.');
 }
 
-async function getUsernameById(userId) {
+async function getProfileById(userId) {
   const { data } = await db
     .from('profiles')
-    .select('username')
+    .select('username, role, ativo')
     .eq('id', userId)
     .maybeSingle();
-  return data?.username || null;
+  return data || null;
+}
+
+async function getUsernameById(userId) {
+  const profile = await getProfileById(userId);
+  return profile?.username || null;
 }
 
 function showLogin() {
