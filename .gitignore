@@ -17,3 +17,6 @@ Thumbs.db
 # Environment (if you ever add a build step)
 .env
 .env.local
+
+#Queries
+schema_updates.sql

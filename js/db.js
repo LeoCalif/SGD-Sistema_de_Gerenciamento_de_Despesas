@@ -609,6 +609,7 @@ async function loadCaixinhas() {
 
 async function createCaixinha() {
   const nome  = document.getElementById('cx-nome').value.trim();
+  const descricao = document.getElementById('cx-descricao').value.trim();
   const meta  = parseFloat(document.getElementById('cx-meta').value) || null;
   const usernameAmigo = document.getElementById('cx-amigo').value.trim().toLowerCase();
 
@@ -620,6 +621,7 @@ async function createCaixinha() {
   // Insert caixinha
   const { data: cx, error } = await db.from('caixinhas').insert({
     nome,
+    descricao:  descricao || null,
     meta:       meta || null,
     criado_por: currentUser.id,
     user_id:    currentUser.id,
@@ -627,7 +629,7 @@ async function createCaixinha() {
 
   if (error || !cx) {
     console.error("Erro ao criar caixinha:", error);
-    toast('Erro ao criar caixinha.', 'error');
+    toast('Erro ao criar caixinha: ' + (error?.message || 'registro não retornado'), 'error');
     btn.disabled = false; btn.textContent = 'Criar';
     return;
   }
@@ -654,12 +656,128 @@ async function createCaixinha() {
     }
   }
 
+  // Clear inputs
+  document.getElementById('cx-nome').value = '';
+  document.getElementById('cx-descricao').value = '';
+  document.getElementById('cx-meta').value = '';
+  document.getElementById('cx-amigo').value = '';
+
   btn.disabled = false; btn.textContent = 'Criar';
   closeModal('modal-nova-caixinha');
   await loadCaixinhas();
   toast(`Caixinha "${nome}" criada!`, 'success');
   renderCaixinhas();
 }
+
+async function updateCaixinha(id) {
+  const nome = document.getElementById('edit-cx-nome-' + id).value.trim();
+  const meta = parseFloat(document.getElementById('edit-cx-meta-' + id).value) || null;
+  const descricao = document.getElementById('edit-cx-desc-' + id).value.trim();
+
+  if (!nome) { toast('O nome não pode ser vazio.', 'error'); return; }
+
+  const btn = document.getElementById('btn-save-cx-' + id);
+  if (btn) { btn.disabled = true; btn.textContent = 'Salvando...'; }
+
+  const { error } = await db.from('caixinhas').update({
+    nome,
+    meta,
+    descricao: descricao || null
+  }).eq('id', id);
+
+  if (btn) { btn.disabled = false; btn.textContent = 'Salvar'; }
+
+  if (error) {
+    console.error("Erro ao atualizar caixinha:", error);
+    toast('Erro ao atualizar caixinha.', 'error');
+    return;
+  }
+
+  await loadCaixinhas();
+  toast('Caixinha atualizada!', 'success');
+  renderCaixinhas();
+  showCaixinhaDetail(id);
+}
+
+async function adicionarMembroCaixinha(caixinhaId) {
+  const input = document.getElementById('cx-add-membro-input');
+  const username = input?.value.trim().toLowerCase();
+
+  if (!username) { toast('Digite o username do amigo.', 'error'); return; }
+
+  const btn = document.getElementById('cx-add-membro-btn');
+  if (btn) { btn.disabled = true; }
+
+  // Check if user is already a member
+  const currentCx = state.caixinhas.find(c => c.id === caixinhaId);
+  if (currentCx) {
+    const alreadyMember = currentCx.membros.some(m => {
+      const uName = usernameCache[m.user_id]?.toLowerCase();
+      return uName === username;
+    });
+    if (alreadyMember) {
+      toast('Este usuário já é membro da caixinha.', 'warning');
+      if (btn) btn.disabled = false;
+      return;
+    }
+  }
+
+  // Fetch friend's profile
+  const { data: profile, error: pError } = await db
+    .from('profiles')
+    .select('id')
+    .ilike('username', username)
+    .maybeSingle();
+
+  if (pError || !profile) {
+    toast(`Usuário "${username}" não encontrado.`, 'error');
+    if (btn) btn.disabled = false;
+    return;
+  }
+
+  // Insert into caixinha_membros
+  const { error } = await db.from('caixinha_membros').insert({
+    caixinha_id: caixinhaId,
+    user_id: profile.id
+  });
+
+  if (btn) btn.disabled = false;
+
+  if (error) {
+    console.error("Erro ao adicionar membro:", error);
+    toast('Erro ao adicionar membro.', 'error');
+    return;
+  }
+
+  if (input) input.value = '';
+  await loadCaixinhas();
+  toast('Membro adicionado com sucesso!', 'success');
+  renderCaixinhas();
+  showCaixinhaDetail(caixinhaId);
+}
+
+async function removerMembroCaixinha(caixinhaId, userId) {
+  const memberName = usernameCache[userId] || 'Este usuário';
+  if (!confirm(`Remover ${memberName} da caixinha?`)) return;
+
+  const { error } = await db
+    .from('caixinha_membros')
+    .delete()
+    .eq('caixinha_id', caixinhaId)
+    .eq('user_id', userId);
+
+  if (error) {
+    console.error("Erro ao remover membro:", error);
+    toast('Erro ao remover membro.', 'error');
+    return;
+  }
+
+  await loadCaixinhas();
+  toast('Membro removido.');
+  renderCaixinhas();
+  showCaixinhaDetail(caixinhaId);
+}
+
 
 async function adicionarDeposito(caixinhaId) {
   const valorEl = document.getElementById('dep-valor-' + caixinhaId);
@@ -684,6 +802,7 @@ async function adicionarDeposito(caixinhaId) {
   await loadCaixinhas();
   toast('Depósito registrado!', 'success');
   renderCaixinhas();
+  showCaixinhaDetail(caixinhaId);
 }
 
 async function deletarDeposito(depositoId, caixinhaId) {
@@ -693,6 +812,7 @@ async function deletarDeposito(depositoId, caixinhaId) {
   await loadCaixinhas();
   toast('Depósito removido.');
   renderCaixinhas();
+  showCaixinhaDetail(caixinhaId);
 }
 
 async function deletarCaixinha(id, nome) {
@@ -702,6 +822,7 @@ async function deletarCaixinha(id, nome) {
   await db.from('caixinhas').delete().eq('id', id);
   state.caixinhas = state.caixinhas.filter(c => c.id !== id);
   toast(`"${nome}" apagada.`);
+  closeModal('modal-detalhe-caixinha');
   renderCaixinhas();
 }
 

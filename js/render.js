@@ -389,116 +389,235 @@ function renderCaixinhas() {
 
   if (!state.caixinhas.length) {
     container.innerHTML = `
+      <div style="display:flex;justify-content:flex-end;margin-bottom:20px">
+        <button class="btn primary" onclick="openModal('modal-nova-caixinha')">+ Nova Caixinha</button>
+      </div>
       <div class="empty-state">
         <div class="icon">💰</div>
         <p>Nenhuma caixinha ainda.<br>Crie uma para começar a poupar juntos!</p>
-        <button class="btn primary" style="margin:16px auto 0;display:inline-flex" onclick="openModal('modal-nova-caixinha')">
-          + Nova Caixinha
-        </button>
       </div>`;
     return;
   }
 
-  const cards = state.caixinhas.map(cx => {
+  const gridHtml = state.caixinhas.map(cx => {
     const total = cx.depositos.reduce((s, d) => s + Number(d.valor), 0);
     const pct   = cx.meta ? Math.min(100, (total / cx.meta) * 100) : null;
 
-    // Per-person totals
-    const byUser = {};
-    cx.depositos.forEach(d => {
-      byUser[d.user_id] = (byUser[d.user_id] || 0) + Number(d.valor);
-    });
-
-    const userRows = Object.entries(byUser).map(([uid, val]) => {
-      const label = usernameCache[uid] || (uid === currentUser.id ? 'Você' : uid.substring(0,8));
-      return `<div style="display:flex;justify-content:space-between;font-size:12px;padding:4px 0;border-bottom:1px solid var(--border)">
-        <span style="color:var(--text2)">${esc(label)}</span>
-        <span style="font-weight:600;color:var(--green)">R$ ${fmt(val)}</span>
-      </div>`;
-    }).join('');
-
-    // Progress bar
     const progressHtml = cx.meta ? `
-      <div style="margin:12px 0 4px">
-        <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text3);margin-bottom:5px">
-          <span>Progresso</span>
-          <span>${pct.toFixed(1)}% de R$ ${fmt(cx.meta)}</span>
-        </div>
-        <div style="height:8px;background:var(--bg3);border-radius:20px;overflow:hidden">
-          <div style="height:100%;width:${pct}%;background:var(--accent);border-radius:20px;transition:width 0.4s"></div>
-        </div>
-      </div>` : '';
-
-    // Last 5 deposits
-    const lastDeposits = [...cx.depositos].reverse().slice(0, 5).map(d => {
-      const isMe = d.user_id === currentUser.id;
-      const label = usernameCache[d.user_id] || (isMe ? 'Você' : d.user_id.substring(0,8));
-      return `<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:12px">
-        <div>
-          <span style="color:var(--text2)">${esc(label)}</span>
-          ${d.descricao ? `<span style="color:var(--text3);margin-left:6px">${esc(d.descricao)}</span>` : ''}
-          <div style="font-size:10px;color:var(--text3)">${new Date(d.created_at).toLocaleDateString('pt-BR')}</div>
-        </div>
-        <div style="display:flex;align-items:center;gap:8px">
-          <span style="font-weight:600;color:var(--green)">R$ ${fmt(Number(d.valor))}</span>
-          ${isMe ? `<button class="delete-btn" onclick="deletarDeposito('${d.id}','${cx.id}')">✕</button>` : ''}
-        </div>
-      </div>`;
-    }).join('');
-
-    const isCriador = cx.criado_por === currentUser.id;
+      <div class="caixinha-small-card-progress" style="width: ${pct}%"></div>
+    ` : '';
 
     return `
-      <div class="table-card" style="margin-bottom:20px">
-        <div class="table-card-header">
-          <h2 style="display:flex;align-items:center;gap:8px;font-family:var(--font-display)">
-            💰 ${esc(cx.nome)}
-          </h2>
-          <div style="display:flex;align-items:center;gap:10px">
-            <div>
-              <span class="total-label">Total:</span>
-              <span class="total-value">R$ ${fmt(total)}</span>
-            </div>
-            ${isCriador ? `<button class="delete-btn" onclick="deletarCaixinha('${cx.id}','${esc(cx.nome)}')" title="Apagar caixinha" style="font-size:16px">🗑</button>` : ''}
-          </div>
+      <div class="caixinha-small-card" onclick="showCaixinhaDetail('${cx.id}')">
+        <div class="caixinha-small-card-header">
+          <span class="caixinha-small-card-emoji">💰</span>
+          ${cx.meta ? `<span style="font-size:11px;color:var(--text3);font-weight:600">${pct.toFixed(0)}%</span>` : ''}
         </div>
-
-        <div style="padding:16px 18px">
-          ${progressHtml}
-
-          ${Object.keys(byUser).length ? `
-            <div style="margin:12px 0 8px;font-size:11px;text-transform:uppercase;letter-spacing:0.5px;color:var(--text3)">Por pessoa</div>
-            ${userRows}
-          ` : ''}
-
-          <div style="margin:16px 0 8px;font-size:11px;text-transform:uppercase;letter-spacing:0.5px;color:var(--text3)">Últimos depósitos</div>
-          ${lastDeposits || '<div style="font-size:12px;color:var(--text3);padding:8px 0">Nenhum depósito ainda.</div>'}
-
-          <div style="margin-top:16px;display:grid;grid-template-columns:1fr 2fr auto;gap:8px;align-items:end">
-            <div class="field">
-              <label>Valor (R$)</label>
-              <input type="number" id="dep-valor-${cx.id}" placeholder="0,00" step="0.01"
-                onkeydown="if(event.key==='Enter')adicionarDeposito('${cx.id}')">
-            </div>
-            <div class="field">
-              <label>Descrição <span class="hint">(opcional)</span></label>
-              <input type="text" id="dep-desc-${cx.id}" placeholder="Ex: Salário, PIX..."
-                onkeydown="if(event.key==='Enter')adicionarDeposito('${cx.id}')">
-            </div>
-            <div class="field">
-              <label>&nbsp;</label>
-              <button class="btn primary" onclick="adicionarDeposito('${cx.id}')">+ Depositar</button>
-            </div>
-          </div>
+        <div class="caixinha-small-card-nome">${esc(cx.nome)}</div>
+        ${cx.descricao ? `<div class="caixinha-small-card-desc">${esc(cx.descricao)}</div>` : ''}
+        <div class="caixinha-small-card-meta">
+          <span>Acumulado:</span>
+          <span class="caixinha-small-card-total">R$ ${fmt(total)}</span>
         </div>
-      </div>`;
+        ${progressHtml}
+      </div>
+    `;
   }).join('');
 
   container.innerHTML = `
     <div style="display:flex;justify-content:flex-end;margin-bottom:20px">
       <button class="btn primary" onclick="openModal('modal-nova-caixinha')">+ Nova Caixinha</button>
     </div>
-    ${cards}`;
+    <div class="caixinhas-grid">
+      ${gridHtml}
+    </div>
+  `;
+}
+
+function showCaixinhaDetail(id) {
+  const cx = state.caixinhas.find(c => c.id === id);
+  if (!cx) return;
+
+  const container = document.getElementById('caixinha-detalhes-container');
+  if (!container) return;
+
+  const total = cx.depositos.reduce((s, d) => s + Number(d.valor), 0);
+  const pct   = cx.meta ? Math.min(100, (total / cx.meta) * 100) : null;
+
+  // Aggregate deposits by user
+  const byUser = {};
+  cx.depositos.forEach(d => {
+    byUser[d.user_id] = (byUser[d.user_id] || 0) + Number(d.valor);
+  });
+
+  const userRows = Object.entries(byUser).map(([uid, val]) => {
+    const label = usernameCache[uid] || (uid === currentUser.id ? 'Você' : uid.substring(0,8));
+    return `<div style="display:flex;justify-content:space-between;font-size:12px;padding:4px 0;border-bottom:1px solid var(--border)">
+      <span style="color:var(--text2)">${esc(label)}</span>
+      <span style="font-weight:600;color:var(--green)">R$ ${fmt(val)}</span>
+    </div>`;
+  }).join('');
+
+  // Progress Bar
+  const progressHtml = cx.meta ? `
+    <div style="margin:12px 0 4px">
+      <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text3);margin-bottom:5px">
+        <span>Progresso</span>
+        <span>${pct.toFixed(1)}% de R$ ${fmt(cx.meta)}</span>
+      </div>
+      <div style="height:8px;background:var(--bg3);border-radius:20px;overflow:hidden">
+        <div style="height:100%;width:${pct}%;background:var(--accent);border-radius:20px;transition:width 0.4s"></div>
+      </div>
+    </div>` : '';
+
+  // Last 5 deposits
+  const lastDeposits = [...cx.depositos].reverse().slice(0, 5).map(d => {
+    const isMe = d.user_id === currentUser.id;
+    const label = usernameCache[d.user_id] || (isMe ? 'Você' : d.user_id.substring(0,8));
+    return `<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:12px">
+      <div>
+        <span style="color:var(--text2)">${esc(label)}</span>
+        ${d.descricao ? `<span style="color:var(--text3);margin-left:6px">${esc(d.descricao)}</span>` : ''}
+        <div style="font-size:10px;color:var(--text3)">${new Date(d.created_at).toLocaleDateString('pt-BR')}</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="font-weight:600;color:var(--green)">R$ ${fmt(Number(d.valor))}</span>
+        ${isMe ? `<button class="delete-btn" onclick="deletarDeposito('${d.id}','${cx.id}')">✕</button>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+
+  const isCriador = cx.criado_por === currentUser.id;
+
+  // Members section
+  const membersChips = cx.membros.map(m => {
+    const label = usernameCache[m.user_id] || (m.user_id === currentUser.id ? 'Você' : m.user_id.substring(0,8));
+    const showRemove = isCriador && m.user_id !== cx.criado_por;
+    return `
+      <div class="member-chip">
+        <span>👤 ${esc(label)}</span>
+        ${showRemove ? `<button class="remove-btn" onclick="removerMembroCaixinha('${cx.id}', '${m.user_id}')" title="Remover membro">✕</button>` : ''}
+      </div>
+    `;
+  }).join('');
+
+  const addMemberFormHtml = isCriador ? `
+    <div style="margin-top:12px; display:flex; gap:8px;">
+      <input type="text" id="cx-add-membro-input" placeholder="Username do amigo..." style="flex:1; padding:6px 10px; font-size:12px; background:var(--bg3); border:1px solid var(--border); border-radius:var(--radius); color:var(--text);" onkeydown="if(event.key==='Enter')adicionarMembroCaixinha('${cx.id}')">
+      <button class="btn primary sm" id="cx-add-membro-btn" onclick="adicionarMembroCaixinha('${cx.id}')" style="padding: 6px 12px; font-size:12px;">Convidar</button>
+    </div>
+  ` : '';
+
+  // Render modal content
+  container.innerHTML = `
+    <!-- Detail View Mode -->
+    <div id="cx-detail-view-${cx.id}">
+      <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px;">
+        <div style="flex:1; min-width:0; padding-right:12px;">
+          <h2 style="display:flex;align-items:center;gap:8px;font-family:var(--font-display);font-size:20px;word-break:break-word;">
+            💰 ${esc(cx.nome)}
+          </h2>
+          ${cx.descricao ? `<div class="caixinha-desc-container">${esc(cx.descricao)}</div>` : ''}
+        </div>
+        <div style="display:flex; align-items:center; gap:8px; flex-shrink:0;">
+          ${isCriador ? `<button class="btn sm" onclick="toggleCxEditMode('${cx.id}', true)">✏️ Editar</button>` : ''}
+          <button class="delete-btn" onclick="closeModal('modal-detalhe-caixinha')" style="font-size:18px;">✕</button>
+        </div>
+      </div>
+
+      <div style="margin-bottom: 20px;">
+        <span class="total-label">Total Guardado:</span>
+        <span class="total-value" style="font-size:22px; color:var(--green); font-weight:700; display:block; margin-top:4px;">R$ ${fmt(total)}</span>
+      </div>
+
+      ${progressHtml}
+
+      <!-- Members Section -->
+      <div style="margin:20px 0 12px;">
+        <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.5px;color:var(--text3)">Membros Ativos</div>
+        <div class="members-section-container">
+          ${membersChips}
+        </div>
+        ${addMemberFormHtml}
+      </div>
+
+      ${Object.keys(byUser).length ? `
+        <div style="margin:20px 0 8px;font-size:11px;text-transform:uppercase;letter-spacing:0.5px;color:var(--text3)">Total por pessoa</div>
+        <div style="margin-bottom:16px;">
+          ${userRows}
+        </div>
+      ` : ''}
+
+      <div style="margin:20px 0 8px;font-size:11px;text-transform:uppercase;letter-spacing:0.5px;color:var(--text3)">Últimos depósitos</div>
+      <div style="margin-bottom:20px; max-height: 180px; overflow-y: auto; border:1px solid var(--border); border-radius:var(--radius); padding:4px 10px;">
+        ${lastDeposits || '<div style="font-size:12px;color:var(--text3);padding:8px 0">Nenhum depósito ainda.</div>'}
+      </div>
+
+      <!-- Add Deposit Form -->
+      <div style="background:var(--bg3); border: 1px solid var(--border); border-radius:var(--radius); padding:14px; margin-top:20px;">
+        <h4 style="margin-bottom:10px; font-size:13px; font-weight:600;">Fazer um depósito</h4>
+        <div style="display:grid;grid-template-columns:1fr 2fr auto;gap:8px;align-items:end">
+          <div class="field" style="margin-bottom:0;">
+            <label style="font-size:10px;">Valor (R$)</label>
+            <input type="number" id="dep-valor-${cx.id}" placeholder="0,00" step="0.01" style="padding:6px 8px; font-size:12px; background:var(--bg2); border:1px solid var(--border); border-radius:var(--radius); color:var(--text); width:100%;" onkeydown="if(event.key==='Enter')adicionarDeposito('${cx.id}')">
+          </div>
+          <div class="field" style="margin-bottom:0;">
+            <label style="font-size:10px;">Descrição <span class="hint">(opcional)</span></label>
+            <input type="text" id="dep-desc-${cx.id}" placeholder="Ex: Salário, PIX..." style="padding:6px 8px; font-size:12px; background:var(--bg2); border:1px solid var(--border); border-radius:var(--radius); color:var(--text); width:100%;" onkeydown="if(event.key==='Enter')adicionarDeposito('${cx.id}')">
+          </div>
+          <div>
+            <button class="btn primary sm" onclick="adicionarDeposito('${cx.id}')" style="padding:6px 12px; font-size:12px; height:31px;">+ Depositar</button>
+          </div>
+        </div>
+      </div>
+
+      ${isCriador ? `
+        <div style="margin-top:24px; border-top:1px solid var(--border); padding-top:16px; display:flex; justify-content:space-between; align-items:center;">
+          <span style="font-size:11px; color:var(--text3);">Criado por você</span>
+          <button class="btn danger sm" onclick="deletarCaixinha('${cx.id}','${esc(cx.nome)}')" style="padding:6px 12px; font-size:12px;">🗑 Excluir Caixinha</button>
+        </div>
+      ` : ''}
+    </div>
+
+    <!-- Edit View Mode -->
+    <div id="cx-edit-view-${cx.id}" class="hidden">
+      <h3 style="margin-bottom:16px;">✏️ Editar Caixinha</h3>
+      
+      <div class="field" style="margin-bottom:12px;">
+        <label>Nome da caixinha</label>
+        <input type="text" id="edit-cx-nome-${cx.id}" value="${esc(cx.nome)}" style="width:100%; padding:8px; background:var(--bg3); border:1px solid var(--border); border-radius:var(--radius); color:var(--text);">
+      </div>
+
+      <div class="field" style="margin-bottom:12px;">
+        <label>Descrição</label>
+        <textarea id="edit-cx-desc-${cx.id}" rows="3" style="width:100%; padding:8px; background:var(--bg3); border:1px solid var(--border); border-radius:var(--radius); color:var(--text); font-family:var(--font); font-size:13px; resize:vertical;">${esc(cx.descricao || '')}</textarea>
+      </div>
+
+      <div class="field" style="margin-bottom:16px;">
+        <label>Meta (R$) <span class="hint">(opcional)</span></label>
+        <input type="number" id="edit-cx-meta-${cx.id}" value="${cx.meta || ''}" step="0.01" style="width:100%; padding:8px; background:var(--bg3); border:1px solid var(--border); border-radius:var(--radius); color:var(--text);">
+      </div>
+
+      <div style="display:flex; justify-content:flex-end; gap:8px;">
+        <button class="btn" onclick="toggleCxEditMode('${cx.id}', false)">Cancelar</button>
+        <button class="btn primary" id="btn-save-cx-${cx.id}" onclick="updateCaixinha('${cx.id}')">Salvar</button>
+      </div>
+    </div>
+  `;
+
+  openModal('modal-detalhe-caixinha');
+}
+
+function toggleCxEditMode(id, editMode) {
+  const detailView = document.getElementById('cx-detail-view-' + id);
+  const editView = document.getElementById('cx-edit-view-' + id);
+  if (editMode) {
+    detailView?.classList.add('hidden');
+    editView?.classList.remove('hidden');
+  } else {
+    detailView?.classList.remove('hidden');
+    editView?.classList.add('hidden');
+  }
 }
 
 // ── COMPARTILHADOS ────────────────────────────────────
