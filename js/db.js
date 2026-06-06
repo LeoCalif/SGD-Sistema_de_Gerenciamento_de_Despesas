@@ -37,13 +37,32 @@ async function loadAll() {
 async function loadGastos() {
   if (!state.currentMonth) return;
   setSyncStatus(false);
-  const { data } = await db
+
+  const gastosPromise = db
     .from('gastos')
     .select('*')
     .eq('user_id', currentUser.id)
     .eq('mes_id', state.currentMonth)
     .order('created_at');
-  state.gastos = data || [];
+
+  const anotacoesPromise = db
+    .from('anotacoes')
+    .select('*')
+    .eq('user_id', currentUser.id)
+    .eq('mes_id', state.currentMonth);
+
+  const [gastosRes, anotacoesRes] = await Promise.all([
+    gastosPromise,
+    anotacoesPromise
+  ]);
+
+  state.gastos = gastosRes.data || [];
+  state.anotacoes = anotacoesRes.error ? [] : (anotacoesRes.data || []);
+  
+  if (anotacoesRes.error) {
+    console.warn("Tabela public.anotacoes pode não ter sido criada no Supabase ainda.", anotacoesRes.error);
+  }
+
   setSyncStatus(true);
 }
 
@@ -1114,4 +1133,65 @@ async function changeUserPassword() {
   document.getElementById('change-pwd-new').value = '';
   document.getElementById('change-pwd-confirm').value = '';
   toast('Senha alterada com sucesso!', 'success');
+}
+
+// ── ANOTAÇÕES ─────────────────────────────────────────
+async function saveAnotacao(pessoa, texto) {
+  if (!state.currentMonth) return;
+  setSyncStatus(false);
+
+  const cleanTexto = texto.trim();
+
+  if (!cleanTexto) {
+    // Se a anotação for vazia, removemos o registro do banco
+    const { error } = await db
+      .from('anotacoes')
+      .delete()
+      .eq('user_id', currentUser.id)
+      .eq('mes_id', state.currentMonth)
+      .eq('pessoa', pessoa);
+
+    if (!error) {
+      state.anotacoes = state.anotacoes.filter(
+        n => !(n.pessoa === pessoa && n.mes_id === state.currentMonth)
+      );
+      toast('Anotação removida.', 'success');
+    } else {
+      toast('Erro ao remover anotação.', 'error');
+      console.error(error);
+    }
+  } else {
+    // Se tiver texto, fazemos upsert
+    const { data, error } = await db
+      .from('anotacoes')
+      .upsert(
+        {
+          user_id: currentUser.id,
+          mes_id: state.currentMonth,
+          pessoa,
+          texto: cleanTexto,
+          updated_at: new Date().toISOString()
+        },
+        { onConflict: 'user_id,mes_id,pessoa' }
+      )
+      .select()
+      .single();
+
+    if (!error && data) {
+      const idx = state.anotacoes.findIndex(
+        n => n.pessoa === pessoa && n.mes_id === state.currentMonth
+      );
+      if (idx !== -1) {
+        state.anotacoes[idx] = data;
+      } else {
+        state.anotacoes.push(data);
+      }
+      toast('Anotação salva!', 'success');
+    } else {
+      toast('Erro ao salvar anotação.', 'error');
+      console.error(error);
+    }
+  }
+
+  setSyncStatus(true);
 }

@@ -230,92 +230,294 @@ async function exportPessoaPDF() {
 
   // Build HTML for printing
   const css = `
-    @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500&family=Syne:wght@700&display=swap');
-    * { box-sizing:border-box; margin:0; padding:0; }
-    body { font-family:'DM Sans',sans-serif; background:#fff; color:#111; font-size:13px; }
-    .page { width:100%; padding:32px 36px; page-break-after:always; }
-    .page:last-child { page-break-after: avoid; }
-    .header { display:flex; align-items:center; gap:16px; margin-bottom:24px; padding-bottom:16px; border-bottom:2px solid #7c6ef5; }
-    .avatar { width:48px; height:48px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-family:'Syne',sans-serif; font-size:16px; font-weight:700; flex-shrink:0; }
-    .person-name { font-family:'Syne',sans-serif; font-size:22px; font-weight:700; }
-    .month-tag { font-size:12px; color:#6b7280; margin-top:2px; }
-    .total-badge { margin-left:auto; text-align:right; }
-    .total-badge .label { font-size:11px; color:#6b7280; text-transform:uppercase; letter-spacing:0.5px; }
-    .total-badge .value { font-family:'Syne',sans-serif; font-size:22px; font-weight:700; color:#7c6ef5; }
-    .card-section { margin-bottom:18px; border:1px solid #e5e7eb; border-radius:10px; overflow:hidden; }
-    .card-title { display:flex; align-items:center; justify-content:space-between; padding:10px 14px; background:#f9fafb; border-bottom:1px solid #e5e7eb; }
-    .card-title-left { display:flex; align-items:center; gap:8px; font-weight:600; font-size:13px; }
-    .dot { width:10px; height:10px; border-radius:50%; display:inline-block; }
-    .card-total-val { font-family:'Syne',sans-serif; font-weight:700; font-size:14px; }
-    table { width:100%; border-collapse:collapse; }
-    th { padding:8px 12px; text-align:left; font-size:10px; text-transform:uppercase; letter-spacing:0.5px; color:#9ca3af; background:#f9fafb; border-bottom:1px solid #e5e7eb; font-weight:500; }
-    td { padding:9px 12px; font-size:12px; border-bottom:1px solid #f3f4f6; }
-    tr:last-child td { border-bottom:none; }
-    .valor-pos { color:#16a34a; font-weight:600; }
-    .valor-neg { color:#dc2626; font-weight:600; }
-    .pill { display:inline-block; padding:2px 8px; border-radius:20px; font-size:10px; font-weight:500; }
-    .empty-desc { color:#9ca3af; font-style:italic; }
-    .footer { margin-top:24px; text-align:center; font-size:10px; color:#9ca3af; border-top:1px solid #e5e7eb; padding-top:12px; }
+    @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=Syne:wght@600;700&display=swap');
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'DM Sans', sans-serif; background: #ffffff; color: #0f172a; font-size: 13px; line-height: 1.5; padding: 20px; }
+    
+    .person-page {
+      width: 100%;
+      page-break-after: always;
+      break-after: always;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .person-page:last-child {
+      page-break-after: avoid;
+      break-after: avoid;
+    }
+    
+    .report-header { display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid #cbd5e1; padding-bottom: 14px; margin-bottom: 12px; }
+    .report-title h1 { font-family: 'Syne', sans-serif; font-size: 20px; font-weight: 700; color: #1e293b; }
+    .report-title p { font-size: 12px; color: #64748b; margin-top: 2px; }
+    .report-meta { text-align: right; font-size: 11px; color: #64748b; line-height: 1.4; }
+
+    .person-card {
+      background: #ffffff;
+      border: 1px solid #cbd5e1;
+      border-radius: 12px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.02);
+    }
+    .person-card-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: #e2e8f0; /* Destaque cinza escuro para cabeçalho da pessoa */
+      border-bottom: 1px solid #cbd5e1;
+      padding: 14px 16px;
+    }
+    .person-avatar {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-family: 'Syne', sans-serif;
+      font-size: 13px;
+    }
+    .person-name {
+      font-weight: 600;
+      font-size: 15px;
+      font-family: 'Syne', sans-serif;
+      color: #1e293b;
+    }
+    .person-total {
+      font-size: 12px;
+      color: #475569;
+      margin-top: 1px;
+    }
+    .person-total span {
+      color: #2563eb;
+      font-weight: 700;
+    }
+    .card-breakdown {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      padding: 16px;
+    }
+    .card-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+    .card-row {
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      background: #f8fafc;
+      border-radius: 8px;
+      border: 1px solid #cbd5e1;
+      overflow: hidden;
+    }
+    .card-row-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-weight: 600;
+      font-size: 12px;
+      color: #1e293b;
+      background: #cbd5e1; /* Destaque cinza escuro para cabeçalho do cartão */
+      border-bottom: 1px solid #94a3b8;
+      padding: 8px 12px;
+    }
+    .card-row-title {
+      display: flex;
+      align-items: center;
+    }
+    .color-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      display: inline-block;
+      margin-right: 6px;
+    }
+    .card-items-detail {
+      padding: 6px 12px;
+    }
+    .detail-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 5px 0;
+      border-bottom: 1px dashed #cbd5e1;
+      font-size: 11px;
+    }
+    .detail-item:last-child {
+      border-bottom: none;
+    }
+    .detail-item-left {
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+    }
+    .detail-item-desc {
+      color: #334155;
+      font-weight: 500;
+    }
+    .detail-item-desc.empty {
+      color: #94a3b8;
+      font-style: italic;
+    }
+    .detail-item-parc {
+      font-size: 9px;
+      color: #64748b;
+    }
+    .parc-badge {
+      display: inline-block;
+      padding: 1px 5px;
+      border-radius: 10px;
+      font-size: 8px;
+      font-weight: 600;
+      margin-left: 4px;
+    }
+    .detail-item-valor {
+      font-weight: 600;
+      font-family: 'Syne', sans-serif;
+      font-size: 11px;
+    }
+    .valor-neg { color: #dc2626; }
+    .valor-pos { color: #16a34a; }
+    
+    .person-note-box {
+      background: #f8fafc;
+      border-left: 3px solid #2563eb;
+      padding: 8px 10px;
+      border-radius: 4px;
+      font-size: 11px;
+      color: #334155;
+      margin-top: 8px;
+      border: 1px solid #cbd5e1;
+      text-align: left;
+    }
+    .person-note-title {
+      font-weight: 700;
+      font-size: 9px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: #64748b;
+      margin-bottom: 2px;
+    }
+    .person-note-text {
+      white-space: pre-wrap;
+      line-height: 1.4;
+    }
+    
+    .footer {
+      text-align: center;
+      font-size: 10px;
+      color: #94a3b8;
+      margin-top: auto;
+      padding-top: 12px;
+      border-top: 1px solid #cbd5e1;
+    }
+
     @media print {
-      body { -webkit-print-color-adjust:exact; print-color-adjust:exact; }
-      .page { padding:24px; }
+      body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .person-page {
+        height: 100%;
+        page-break-inside: avoid;
+        break-inside: avoid;
+      }
+    }
+    @media (max-width: 650px) {
+      .card-grid { grid-template-columns: 1fr !important; }
     }
   `;
 
   const COLORS_PDF = ['#7c6ef5','#4ade80','#fbbf24','#f87171','#60a5fa','#f472b6','#34d399','#fb923c'];
   const getC = (list, name) => COLORS_PDF[Math.max(0,list.indexOf(name)) % COLORS_PDF.length];
 
-  const pages = activePeople.map(person => {
+  const pagesHtml = activePeople.map((person, idx) => {
     const pc    = getC(state.persons, person);
     const cards = state.cards.filter(c => byPerson[person][c]?.total > 0);
     const total = cards.reduce((s,c) => s+(byPerson[person][c]?.total||0), 0);
 
-    const cardSections = cards.map(c => {
+    const isFirst = idx === 0;
+    const reportHeaderHtml = isFirst ? `
+      <div class="report-header">
+        <div class="report-title">
+          <h1>Klif Despesas — Resumo por Pessoa</h1>
+          <p>Mês de Referência: ${monthName}</p>
+        </div>
+        <div class="report-meta">
+          Gerado em ${new Date().toLocaleDateString('pt-BR')}
+        </div>
+      </div>
+    ` : '';
+
+    // Get note text
+    const noteObj = state.anotacoes ? state.anotacoes.find(n => n.pessoa === person && n.mes_id === state.currentMonth) : null;
+    const noteText = noteObj ? noteObj.texto : '';
+    const noteHtml = noteText.trim() !== '' 
+      ? `<div class="person-note-box">
+          <div class="person-note-title">📝 Anotações do Mês</div>
+          <div class="person-note-text">${esc(noteText)}</div>
+         </div>`
+      : '';
+
+    const cardRows = cards.map(c => {
       const cc   = getC(state.cards, c);
       const data = byPerson[person][c];
-      const rows = data.items.map(g => {
-        const parc = g.parcelas > 1 ? `${g.parcelas}x` : 'À vista';
-        const desc = g.descricao
-          ? g.descricao.replace(/</g,'&lt;').replace(/>/g,'&gt;')
-          : '<span class="empty-desc">—</span>';
+      
+      const itemsHtml = data.items.map(g => {
+        const pAt = g.parcela_atual || 1;
+        const badge = g.parcelas > 1
+          ? `<span class="parc-badge" style="background:${cc}18;color:${cc}">${pAt}/${g.parcelas}x</span>`
+          : `<span style="color:#64748b">À vista</span>`;
+        const dLabel = g.descricao
+          ? `<span class="detail-item-desc">${esc(g.descricao)}</span>`
+          : `<span class="detail-item-desc empty">sem descrição</span>`;
         const valClass = Number(g.valor) < 0 ? 'valor-neg' : 'valor-pos';
-        return `<tr>
-          <td>${desc}</td>
-          <td>${parc}</td>
-          <td style="text-align:right" class="${valClass}">R$ ${Math.abs(Number(g.valor)).toLocaleString('pt-BR',{minimumFractionDigits:2})}</td>
-        </tr>`;
+        return `<div class="detail-item">
+          <div class="detail-item-left">
+            ${dLabel}
+            <div class="detail-item-parc">${badge}</div>
+          </div>
+          <span class="detail-item-valor ${valClass}">R$ ${fmt(Number(g.valor))}</span>
+        </div>`;
       }).join('');
 
-      return `<div class="card-section">
-        <div class="card-title">
-          <span class="card-title-left">
-            <span class="dot" style="background:${cc}"></span>${c}
+      return `<div class="card-row">
+        <div class="card-row-header">
+          <span class="card-row-title">
+            <span class="color-dot" style="background:${cc}"></span>
+            ${esc(c)}
           </span>
-          <span class="card-total-val" style="color:${cc}">
-            R$ ${data.total.toLocaleString('pt-BR',{minimumFractionDigits:2})}
-          </span>
+          <span style="color:${cc}">R$ ${fmt(data.total)}</span>
         </div>
-        <table>
-          <thead><tr><th>Descrição</th><th>Parcelas</th><th style="text-align:right">Valor</th></tr></thead>
-          <tbody>${rows}</tbody>
-        </table>
+        <div class="card-items-detail">
+          ${itemsHtml}
+        </div>
       </div>`;
     }).join('');
 
-    return `<div class="page">
-      <div class="header">
-        <div class="avatar" style="background:${pc}22;color:${pc}">${person.substring(0,2).toUpperCase()}</div>
-        <div>
-          <div class="person-name">${person}</div>
-          <div class="month-tag">📅 ${monthName}</div>
+    return `<div class="person-page">
+      ${reportHeaderHtml}
+      <div class="person-card">
+        <div class="person-card-header">
+          <div class="person-avatar" style="background:${pc}22;color:${pc}">${person.substring(0,2).toUpperCase()}</div>
+          <div>
+            <div class="person-name">${esc(person)}</div>
+            <div class="person-total">Total: <span>R$ ${fmt(total)}</span></div>
+          </div>
         </div>
-        <div class="total-badge">
-          <div class="label">Total geral</div>
-          <div class="value">R$ ${total.toLocaleString('pt-BR',{minimumFractionDigits:2})}</div>
+        <div class="card-breakdown">
+          <div class="card-grid">
+            ${cardRows}
+          </div>
+          ${noteHtml}
         </div>
       </div>
-      ${cardSections}
-      <div class="footer">Controle de Cartões · ${monthName} · Gerado em ${new Date().toLocaleDateString('pt-BR')}</div>
+      <div class="footer">
+        Klif Despesas · Controle de Gastos · Gerado em ${new Date().toLocaleDateString('pt-BR')}
+      </div>
     </div>`;
   }).join('');
 
@@ -323,7 +525,7 @@ async function exportPessoaPDF() {
     <meta charset="UTF-8">
     <title>Gastos por Pessoa — ${monthName}</title>
     <style>${css}</style>
-  </head><body>${pages}</body></html>`;
+  </head><body>${pagesHtml}</body></html>`;
 
   const win = window.open('', '_blank');
   win.document.write(html);

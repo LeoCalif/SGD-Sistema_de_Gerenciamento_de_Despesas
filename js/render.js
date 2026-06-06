@@ -227,6 +227,13 @@ function renderResumo() {
     const total = cards.reduce((s,c) => s+(byPerson[person][c]?.total||0), 0);
     const isOpen = expandedPersons.has(person);
 
+    const noteObj = state.anotacoes ? state.anotacoes.find(n => n.pessoa === person && n.mes_id === state.currentMonth) : null;
+    const noteText = noteObj ? noteObj.texto : '';
+    const hasNote = noteText.trim() !== '';
+    const noteIndicator = hasNote 
+      ? `<span style="font-size: 12px; margin-left: 6px; cursor: help;" title="Tem anotação neste mês">📝</span>` 
+      : '';
+
     const cardRows = cards.map(c => {
       const cc       = getColor(state.cards, c);
       const cardData = byPerson[person][c];
@@ -263,13 +270,27 @@ function renderResumo() {
       <div class="person-card-header" onclick="togglePerson('${esc(person)}')">
         <div class="person-avatar" style="background:${pc}22;color:${pc}">${person.substring(0,2).toUpperCase()}</div>
         <div>
-          <div class="person-name">${esc(person)}</div>
+          <div class="person-name">${esc(person)}${noteIndicator}</div>
           <div class="person-total">Total: <span>R$ ${fmt(total)}</span></div>
         </div>
         <span class="person-toggle ${isOpen?'open':''}">▼</span>
       </div>
       <div class="card-breakdown person-summary${isOpen?'':' hidden'}">
         ${cardRows}
+        
+        <!-- Notes Section -->
+        <div class="person-notes-section">
+          <div style="font-size:11px; text-transform:uppercase; letter-spacing:0.5px; color:var(--text3); margin-bottom:6px; display:flex; justify-content:space-between; align-items:center;">
+            <span>📝 Anotações do Mês</span>
+            <span class="save-status" id="note-status-${esc(person)}" style="font-size:10px; text-transform:none; opacity:0.8;"></span>
+          </div>
+          <textarea 
+            class="note-textarea" 
+            placeholder="Adicione observações de gastos/pagamentos de ${esc(person)} para este mês..." 
+            onblur="saveNoteForPerson('${esc(person)}', this.value)"
+            oninput="updateNoteStatus('${esc(person)}')"
+          >${esc(noteText)}</textarea>
+        </div>
       </div>
     </div>`;
   }).join('');
@@ -293,6 +314,54 @@ function toggleCardDetail(rowEl) {
   const wasHidden = detail.classList.contains('hidden');
   detail.classList.toggle('hidden', !wasHidden);
   if (icon) icon.textContent = wasHidden ? '▲' : '▼';
+}
+
+async function saveNoteForPerson(personName, value) {
+  const statusEl = document.getElementById(`note-status-${personName}`);
+  if (statusEl) {
+    statusEl.textContent = '⏱ Salvando...';
+    statusEl.style.color = 'var(--green)';
+  }
+  
+  try {
+    await saveAnotacao(personName, value);
+    if (statusEl) statusEl.textContent = '✅ Salvo!';
+    
+    // Atualiza o indicador de anotação no cabeçalho diretamente no DOM
+    const cardEl = document.getElementById(`pcard-${personName}`);
+    if (cardEl) {
+      const nameEl = cardEl.querySelector('.person-name');
+      if (nameEl) {
+        let nameText = nameEl.textContent.replace('📝', '').trim();
+        if (value.trim() !== '') {
+          nameEl.innerHTML = `${esc(nameText)}<span style="font-size: 12px; margin-left: 6px; cursor: help;" title="Tem anotação neste mês">📝</span>`;
+        } else {
+          nameEl.innerHTML = esc(nameText);
+        }
+      }
+    }
+    
+    setTimeout(() => {
+      const currentStatusEl = document.getElementById(`note-status-${personName}`);
+      if (currentStatusEl && currentStatusEl.textContent === '✅ Salvo!') {
+        currentStatusEl.textContent = '';
+      }
+    }, 2000);
+  } catch (err) {
+    if (statusEl) {
+      statusEl.textContent = '❌ Erro ao salvar';
+      statusEl.style.color = 'var(--red)';
+    }
+    console.error(err);
+  }
+}
+
+function updateNoteStatus(personName) {
+  const statusEl = document.getElementById(`note-status-${personName}`);
+  if (statusEl) {
+    statusEl.textContent = '✍️ Editando...';
+    statusEl.style.color = 'var(--amber)';
+  }
 }
 
 // ── POR CARTÃO ────────────────────────────────────────

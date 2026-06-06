@@ -6,6 +6,7 @@ const state = {
   months:       [],
   gastos:       [],
   caixinhas:    [],
+  anotacoes:    [],
   sharedGastos: [],
   sharedPessoas:[],
   sharedMonthsMap: {},

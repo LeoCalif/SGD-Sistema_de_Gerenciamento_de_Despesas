@@ -20,3 +20,6 @@ Thumbs.db
 
 #Queries
 schema_updates.sql
+
+#Projeto de integração com whatsapp
+supabase/

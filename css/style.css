@@ -604,3 +604,34 @@ tbody td          { padding: 10px 14px; font-size: 13px; }
   margin-top: 8px;
 }
 
+/* ── PERSON NOTES ──────────────────────────────────── */
+.person-notes-section {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+.note-textarea {
+  width: 100%;
+  min-height: 68px;
+  background: rgba(15, 23, 42, 0.4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  padding: 10px 12px;
+  font-family: var(--font);
+  font-size: 13px;
+  line-height: 1.4;
+  resize: vertical;
+  outline: none;
+  transition: all 0.2s ease;
+}
+.note-textarea:focus {
+  border-color: var(--accent);
+  background: rgba(15, 23, 42, 0.7);
+  box-shadow: 0 0 0 2px var(--accent-glow);
+}
+.note-textarea::placeholder {
+  color: var(--text3);
+  opacity: 0.6;
+}
+
