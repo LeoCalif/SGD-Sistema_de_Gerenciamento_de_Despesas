@@ -1,10 +1,28 @@
 // ── NAVIGATION ────────────────────────────────────────
 function goTo(page) {
+  const isVisualizador = currentUser && currentUser.role === 'visualizador';
+
+  // Se o usuário for visualizador, restringir acesso apenas às páginas permitidas
+  if (isVisualizador) {
+    const allowedPages = ['compartilhados', 'caixinhas', 'config'];
+    if (!allowedPages.includes(page)) {
+      page = 'compartilhados';
+    }
+  }
+
   currentPage = page;
   ['lancamento','resumo','cartoes-view','caixinhas','config','compartilhados'].forEach(p =>
     document.getElementById('page-'+p)?.classList.toggle('hidden', p !== page));
+  
+  // Atualiza classe ativa dos botões
   document.querySelectorAll('.nav-item').forEach(b =>
     b.classList.toggle('active', b.getAttribute('onclick')?.includes(page)));
+
+  // Congela visualmente as abas restritas para o visualizador
+  document.getElementById('nav-lancamento')?.classList.toggle('disabled', isVisualizador);
+  document.getElementById('nav-resumo')?.classList.toggle('disabled', isVisualizador);
+  document.getElementById('nav-cartoes')?.classList.toggle('disabled', isVisualizador);
+
   const [t,s] = TITLES[page] || ['',''];
   document.getElementById('page-title').textContent = t;
   document.getElementById('page-sub').textContent   = s;
@@ -16,6 +34,12 @@ function goTo(page) {
   if (deleteYearBtn) deleteYearBtn.classList.toggle('hidden', hideTopbar);
   if (pdfBtn) pdfBtn.style.display = page === 'resumo' ? 'flex' : 'none';
   
+  // Oculta completamente as ações de topo se for visualizador
+  const topbarActions = document.querySelector('.topbar-actions');
+  if (topbarActions) {
+    topbarActions.classList.toggle('hidden', isVisualizador);
+  }
+
   if (page === 'compartilhados') {
     state.currentSharedYear = null;
     state.currentSharedMonth = null;
@@ -493,6 +517,47 @@ function renderCartoesView() {
 
 // ── CONFIG ────────────────────────────────────────────
 function renderConfig() {
+  const isVisualizador = currentUser && currentUser.role === 'visualizador';
+
+  // Toggle visibility of cards and danger zone based on role
+  document.getElementById('resources-settings-card')?.classList.toggle('hidden', false);
+  document.getElementById('danger-zone')?.classList.toggle('hidden', isVisualizador);
+
+  // Customize Resources settings card for visualizer
+  const cardsCol = document.querySelector('#resources-settings-card .resources-col-border');
+  if (cardsCol) {
+    cardsCol.classList.toggle('hidden', isVisualizador);
+  }
+  const resourcesGrid = document.querySelector('#resources-settings-card .resources-grid');
+  if (resourcesGrid) {
+    resourcesGrid.style.gridTemplateColumns = isVisualizador ? '1fr' : '';
+  }
+  const resourcesHeader = document.querySelector('#resources-settings-card h3');
+  if (resourcesHeader) {
+    resourcesHeader.innerHTML = isVisualizador ? '👥 Pessoas' : '👥 Pessoas & 💳 Cartões';
+  }
+
+  // Populate profile info card
+  const profileUsernameEl = document.getElementById('profile-username');
+  const profileRoleEl = document.getElementById('profile-role');
+  const profileDescEl = document.getElementById('profile-desc');
+  if (profileUsernameEl && currentUser) {
+    profileUsernameEl.textContent = currentUser.username;
+    if (currentUser.role === 'visualizador') {
+      profileRoleEl.textContent = 'Visualizador';
+      profileRoleEl.style.color = 'var(--amber)';
+      profileDescEl.textContent = 'Você possui acesso de leitura aos gastos lançados em seu nome por outros usuários, além de acesso a caixinhas nas quais foi convidado.';
+    } else if (currentUser.role === 'admin') {
+      profileRoleEl.textContent = 'Administrador';
+      profileRoleEl.style.color = 'var(--green)';
+      profileDescEl.textContent = 'Acesso total ao sistema e ao painel de administração de usuários.';
+    } else {
+      profileRoleEl.textContent = 'Usuário Comum';
+      profileRoleEl.style.color = 'var(--accent)';
+      profileDescEl.textContent = 'Acesso completo ao sistema de lançamentos, caixinhas e relatórios pessoais.';
+    }
+  }
+
   document.getElementById('persons-list').innerHTML = state.personsData.map(p => {
     const c = getColor(state.persons, p.nome);
     const linkLabel = p.vinculo_user_id 
@@ -567,6 +632,7 @@ async function renderAdminPanel() {
         <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:6px; justify-content:flex-start;">
           <select onchange="changeUserRole('${u.id}', this.value)" ${selectDisabled} style="padding:4px 8px; font-size:11px; background:var(--bg3); border:1px solid var(--border); border-radius:var(--radius); color:var(--text); outline:none; height:28px;">
             <option value="user" ${u.role === 'user' ? 'selected' : ''}>Usuário Comum</option>
+            <option value="visualizador" ${u.role === 'visualizador' ? 'selected' : ''}>Visualizador</option>
             <option value="admin" ${u.role === 'admin' ? 'selected' : ''}>Administrador</option>
           </select>
 
@@ -925,26 +991,27 @@ function renderCompartilhados() {
   });
   const years = Object.keys(yearsMap).sort().reverse();
 
-  // Try to pre-select system's active year
-  if (!state.currentSharedYear || !years.includes(state.currentSharedYear)) {
-    const systemMonthName = state.months.find(m => m.id === state.currentMonth)?.nome;
-    const systemYear = systemMonthName ? extractYear(systemMonthName) : null;
-    state.currentSharedYear = (systemYear && years.includes(systemYear)) ? systemYear : (years[0] || null);
-  }
-
-  // Get months in active year
-  const activeYearGastos = yearsMap[state.currentSharedYear] || [];
-  const monthsMap = {};
-  activeYearGastos.forEach(g => {
-    const monthName = state.sharedMonthsMap[g.mes_id] || 'Outros';
-    monthsMap[g.mes_id] = monthName;
-  });
-
-  const months = Object.entries(monthsMap).map(([id, nome]) => ({ id, nome }));
+  const now = new Date();
   const MESES_PT = [
     'Janeiro','Fevereiro','Março','Abril','Maio','Junho',
     'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'
   ];
+  const calendarMonthName = `${MESES_PT[now.getMonth()]}/${now.getFullYear()}`;
+
+  // Try to pre-select system's active year
+  if (!state.currentSharedYear || !years.includes(state.currentSharedYear)) {
+    const systemMonthName = state.months.find(m => m.id === state.currentMonth)?.nome || calendarMonthName;
+    const systemYear = systemMonthName ? extractYear(systemMonthName) : null;
+    state.currentSharedYear = (systemYear && years.includes(systemYear)) ? systemYear : (years[0] || null);
+  }
+
+  // Get all months of the current owner for the active year
+  const activeYearGastos = yearsMap[state.currentSharedYear] || [];
+  const ownerMonths = (state.sharedMonths || []).filter(m => m.user_id === state.currentSharedOwner);
+  const months = ownerMonths
+    .filter(m => extractYear(m.nome) === state.currentSharedYear)
+    .map(m => ({ id: m.id, nome: m.nome }));
+
   months.sort((a, b) => {
     const [ma, ya] = a.nome.split('/');
     const [mb, yb] = b.nome.split('/');
@@ -954,13 +1021,26 @@ function renderCompartilhados() {
 
   // Try to pre-select system's active month by name
   if (!state.currentSharedMonth || !months.some(m => m.id === state.currentSharedMonth)) {
-    const systemMonthName = state.months.find(m => m.id === state.currentMonth)?.nome;
+    const systemMonthName = state.months.find(m => m.id === state.currentMonth)?.nome || calendarMonthName;
     const matchedMonth = systemMonthName ? months.find(m => m.nome.toLowerCase() === systemMonthName.toLowerCase()) : null;
     state.currentSharedMonth = matchedMonth?.id || months[months.length - 1]?.id || null;
   }
 
   // Filter active month gastos
   const activeMonthGastos = activeYearGastos.filter(g => g.mes_id === state.currentSharedMonth);
+
+  // Get active month name (e.g. "Junho/2026")
+  const activeMonthObj = months.find(m => m.id === state.currentSharedMonth);
+  const activeMonthName = activeMonthObj ? activeMonthObj.nome : '';
+
+  // Calculate month total across all shared gastos
+  const monthTotal = state.sharedGastos.reduce((sum, g) => {
+    const gMonthName = state.sharedMonthsMap[g.mes_id] || '';
+    if (activeMonthName && gMonthName.toLowerCase() === activeMonthName.toLowerCase()) {
+      return sum + Number(g.valor);
+    }
+    return sum;
+  }, 0);
 
   // Group by cards
   const cardsMap = {};
@@ -1001,6 +1081,14 @@ function renderCompartilhados() {
   // Month buttons
   const monthSelectorHtml = months.map(m => {
     const isActive = m.id === state.currentSharedMonth;
+    const hasGastos = activeYearGastos.some(g => g.mes_id === m.id);
+    
+    if (!hasGastos) {
+      return `
+        <button class="month-btn" style="opacity: 0.35; cursor: not-allowed; pointer-events: none;" title="Sem despesas neste mês">
+          ${esc(m.nome)}
+        </button>`;
+    }
     return `
       <button class="month-btn${isActive ? ' active' : ''}" onclick="selectSharedMonth('${m.id}')">
         ${esc(m.nome)}
@@ -1067,9 +1155,9 @@ function renderCompartilhados() {
   container.innerHTML = `
     <div class="summary-grid">
       <div class="summary-card accent" style="border-color: var(--green);">
-        <div class="s-label">Total em outros usuários</div>
-        <div class="s-value" style="color: var(--green);">R$ ${fmt(grandTotal)}</div>
-        <div class="s-sub">Soma de todos os seus gastos em cartões de amigos</div>
+        <div class="s-label">Total em outros usuários esse mês</div>
+        <div class="s-value" style="color: var(--green);">R$ ${fmt(monthTotal)}</div>
+        <div class="s-sub">Soma dos seus gastos no cartão de amigos neste mês</div>
       </div>
       <div class="summary-card" onclick="openContasCompartilhadasModal()" style="cursor:pointer;transition:transform 0.15s, border-color 0.15s;border:1px solid var(--border2);" onmouseover="this.style.transform='translateY(-2px)';this.style.borderColor='var(--accent)'" onmouseout="this.style.transform='none';this.style.borderColor='var(--border2)'">
         <div class="s-label" style="display:flex;align-items:center;justify-content:space-between;">

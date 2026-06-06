@@ -9,6 +9,7 @@ const state = {
   anotacoes:    [],
   sharedGastos: [],
   sharedPessoas:[],
+  sharedMonths: [],
   sharedMonthsMap: {},
   currentMonth: null,
   currentCard:  null,

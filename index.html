@@ -63,18 +63,18 @@
     </div>
     <div class="sidebar-section">
       <div class="sidebar-section-label">Menu</div>
-      <button class="nav-item active" onclick="goTo('lancamento')"><span>📝</span> Lançamentos</button>
-      <button class="nav-item" onclick="goTo('resumo')">
+      <button class="nav-item active" onclick="goTo('lancamento')" id="nav-lancamento"><span>📝</span> Lançamentos</button>
+      <button class="nav-item" onclick="goTo('resumo')" id="nav-resumo">
         <span>👥</span> Por Pessoa
         <span class="badge" id="badge-pessoas">0</span>
       </button>
-      <button class="nav-item" onclick="goTo('cartoes-view')"><span>💳</span> Por Cartão</button>
-      <button class="nav-item" onclick="goTo('caixinhas')"><span>💰</span> Caixinhas</button>
-      <button class="nav-item" onclick="goTo('compartilhados')">
+      <button class="nav-item" onclick="goTo('cartoes-view')" id="nav-cartoes"><span>💳</span> Por Cartão</button>
+      <button class="nav-item" onclick="goTo('caixinhas')" id="nav-caixinhas"><span>💰</span> Caixinhas</button>
+      <button class="nav-item" onclick="goTo('compartilhados')" id="nav-compartilhados">
         <span>🤝</span> Em Outros
         <span class="badge hidden" id="badge-compartilhados" style="background:var(--amber);color:var(--bg)">0</span>
       </button>
-      <button class="nav-item" onclick="goTo('config')"><span>⚙️</span> Configurações</button>
+      <button class="nav-item" onclick="goTo('config')" id="nav-config"><span>⚙️</span> Configurações</button>
     </div>
     <div class="sidebar-footer">
       <div style="font-size:11px;color:var(--text3);line-height:1.8;margin-bottom:10px">
@@ -202,25 +202,63 @@
       <!-- ─── CONFIG ─── -->
       <div id="page-config" class="hidden">
         <div class="settings-grid">
-          <div class="settings-card">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
-              <h3 style="margin:0">👤 Pessoas</h3>
-              <button class="btn primary sm" onclick="openModal('modal-add-friend')">🤝 Vincular Amigo</button>
+          <!-- Card de Perfil -->
+          <div class="settings-card" id="profile-settings-card">
+            <h3>👤 Seu Perfil</h3>
+            <div style="margin-top:12px; line-height: 1.8;">
+              <div><strong>Usuário:</strong> <span id="profile-username"></span></div>
+              <div><strong>Perfil:</strong> <span id="profile-role" style="font-weight:600;"></span></div>
+              <div style="margin-top:8px; font-size:12px; color:var(--text3);" id="profile-desc"></div>
             </div>
-            <div id="persons-list"></div>
-            <div class="settings-add">
-              <input type="text" id="new-person" placeholder="Nome genérico (ex: Mãe)..."
-                onkeydown="if(event.key==='Enter')addPerson()">
-              <button class="btn primary sm" onclick="addPerson()">Adicionar</button>
+
+            <hr style="border:0; border-top:1px solid var(--border); margin:20px 0;">
+
+            <h4 style="margin-bottom:8px; font-size:13px; font-weight:600;">🔒 Alterar Senha</h4>
+            <p style="font-size:11px;color:var(--text3);margin-bottom:12px">Defina uma nova senha de acesso para a sua conta.</p>
+            <div class="field">
+              <label style="font-size:11px;color:var(--text2);">Nova Senha</label>
+              <input type="password" id="change-pwd-new" placeholder="Nova senha (min. 6 caracteres)" style="width:100%; padding:8px 12px; background:var(--bg3); border:1px solid var(--border); border-radius:var(--radius); color:var(--text); font-size:12px; outline:none;">
+            </div>
+            <div class="field" style="margin-top:8px;">
+              <label style="font-size:11px;color:var(--text2);">Confirmar Nova Senha</label>
+              <input type="password" id="change-pwd-confirm" placeholder="Confirme a nova senha" style="width:100%; padding:8px 12px; background:var(--bg3); border:1px solid var(--border); border-radius:var(--radius); color:var(--text); font-size:12px; outline:none;">
+            </div>
+            <div style="margin-top:14px;">
+              <button class="btn primary sm" onclick="changeUserPassword()" style="padding:6px 12px; font-size:12px;">Alterar Senha</button>
             </div>
           </div>
-          <div class="settings-card">
-            <h3>💳 Cartões</h3>
-            <div id="cards-list"></div>
-            <div class="settings-add">
-              <input type="text" id="new-card" placeholder="Nome do cartão..."
-                onkeydown="if(event.key==='Enter')addCard()">
-              <button class="btn primary sm" onclick="addCard()">Adicionar</button>
+
+          <!-- Card Unificado: Pessoas & Cartões -->
+          <div class="settings-card" id="resources-settings-card">
+            <h3>👥 Pessoas & 💳 Cartões</h3>
+            <p style="font-size:12px;color:var(--text3);margin-bottom:20px">Gerencie os amigos vinculados e os cartões de crédito cadastrados no sistema.</p>
+            <div class="resources-grid">
+              <!-- Coluna Pessoas -->
+              <div class="resources-col">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+                  <h4 style="margin:0;font-size:13px;font-weight:600">👤 Pessoas</h4>
+                  <button class="btn primary sm" onclick="openModal('modal-add-friend')">🤝 Vincular Amigo</button>
+                </div>
+                <div id="persons-list" style="margin-bottom:12px;"></div>
+                <div class="settings-add">
+                  <input type="text" id="new-person" placeholder="Nome genérico (ex: Mãe)..."
+                    onkeydown="if(event.key==='Enter')addPerson()">
+                  <button class="btn primary sm" onclick="addPerson()">Adicionar</button>
+                </div>
+              </div>
+              
+              <!-- Coluna Cartões -->
+              <div class="resources-col resources-col-border">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+                  <h4 style="margin:0;font-size:13px;font-weight:600">💳 Cartões</h4>
+                </div>
+                <div id="cards-list" style="margin-bottom:12px;"></div>
+                <div class="settings-add">
+                  <input type="text" id="new-card" placeholder="Nome do cartão..."
+                    onkeydown="if(event.key==='Enter')addCard()">
+                  <button class="btn primary sm" onclick="addCard()">Adicionar</button>
+                </div>
+              </div>
             </div>
           </div>
           <!-- Painel do Administrador (Admin-only) -->
@@ -255,25 +293,8 @@
               <!-- Dynamic user list -->
             </div>
           </div>
-
-          <!-- Card de Alteração de Senha (Geral) -->
-          <div class="settings-card">
-            <h3>🔒 Alterar Senha</h3>
-            <p style="font-size:12px;color:var(--text3);margin-bottom:12px">Defina uma nova senha de acesso para a sua conta.</p>
-            <div class="field">
-              <label>Nova Senha</label>
-              <input type="password" id="change-pwd-new" placeholder="Nova senha (min. 6 caracteres)" style="width:100%; padding:9px 12px; background:var(--bg3); border:1px solid var(--border); border-radius:var(--radius); color:var(--text); font-size:13px; outline:none;">
-            </div>
-            <div class="field" style="margin-top:10px;">
-              <label>Confirmar Nova Senha</label>
-              <input type="password" id="change-pwd-confirm" placeholder="Confirme a nova senha" style="width:100%; padding:9px 12px; background:var(--bg3); border:1px solid var(--border); border-radius:var(--radius); color:var(--text); font-size:13px; outline:none;">
-            </div>
-            <div style="margin-top:16px;">
-              <button class="btn primary sm" onclick="changeUserPassword()">Alterar Senha</button>
-            </div>
-          </div>
         </div>
-        <div class="danger-zone">
+        <div class="danger-zone" id="danger-zone">
           <h3>⚠️ Zona de perigo</h3>
           <button class="btn danger" onclick="clearAllData()">🗑 Apagar todos os dados</button>
         </div>

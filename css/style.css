@@ -655,3 +655,42 @@ select.year-tab-select option {
   color: var(--text);
 }
 
+/* ── DISABLED / FROZEN NAVIGATION TABS ───────────────── */
+.nav-item.disabled {
+  opacity: 0.35;
+  cursor: not-allowed !important;
+  pointer-events: none;
+}
+.nav-item.disabled:hover {
+  background: none !important;
+  color: var(--text2) !important;
+}
+
+/* ── RESOURCES SETTINGS GRID ────────────────────────── */
+.resources-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+}
+.resources-col {
+  display: flex;
+  flex-direction: column;
+}
+.resources-col-border {
+  border-left: 1px solid var(--border);
+  padding-left: 24px;
+}
+@media (max-width: 768px) {
+  .resources-grid {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+  .resources-col-border {
+    border-left: none;
+    padding-left: 0;
+    border-top: 1px solid var(--border);
+    padding-top: 20px;
+  }
+}
+
+

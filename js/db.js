@@ -16,8 +16,8 @@ async function loadAll() {
   state.cards   = (cartoes || []).map(c => c.nome);
   state.months  = meses || [];
 
-  // Se o usuário não tiver nenhum mês cadastrado (novo usuário), cria o ano corrente automaticamente
-  if (!state.months || state.months.length === 0) {
+  // Se o usuário não tiver nenhum mês cadastrado (novo usuário), cria o ano corrente automaticamente (se não for visualizador)
+  if (currentUser.role !== 'visualizador' && (!state.months || state.months.length === 0)) {
     const currentYear = new Date().getFullYear();
     await createYearSilent(currentYear);
     const { data: updatedMeses } = await db.from('meses').select('*').eq('user_id', currentUser.id).order('created_at');
@@ -38,7 +38,11 @@ async function loadAll() {
 
   if (state.currentMonth) await loadGastos();
 
-  goTo('lancamento');
+  if (currentUser.role === 'visualizador') {
+    goTo('compartilhados');
+  } else {
+    goTo('lancamento');
+  }
 }
 
 async function loadGastos() {
@@ -912,6 +916,7 @@ async function loadSharedGastos() {
   // 3. Resolve all owners months
   const ownerIds = [...new Set(linkedPessoas.map(p => p.user_id))];
   const { data: sharedMonths } = await db.from('meses').select('*').in('user_id', ownerIds);
+  state.sharedMonths = sharedMonths || [];
   state.sharedMonthsMap = {};
   if (sharedMonths) {
     sharedMonths.forEach(m => {
