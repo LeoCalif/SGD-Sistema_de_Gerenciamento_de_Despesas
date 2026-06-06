@@ -536,3 +536,64 @@ async function exportPessoaPDF() {
   };
   toast('PDF aberto para impressão!', 'success');
 }
+
+async function copyReportToWhatsapp() {
+  if (!state.gastos.length) { toast('Sem dados para exportar.', 'error'); return; }
+
+  const month = state.months.find(m => m.id === state.currentMonth);
+  const monthName = month?.nome || 'Mês';
+  const rawMonth = monthName.split('/')[0].toUpperCase();
+
+  // Build data grouped by person
+  const byPerson = {};
+  state.persons.forEach(p => { byPerson[p] = {}; });
+  state.gastos.forEach(g => {
+    if (!byPerson[g.pessoa]) byPerson[g.pessoa] = {};
+    if (!byPerson[g.pessoa][g.cartao]) byPerson[g.pessoa][g.cartao] = { total:0, items:[] };
+    byPerson[g.pessoa][g.cartao].total += Number(g.valor);
+    byPerson[g.pessoa][g.cartao].items.push(g);
+  });
+
+  // Include people with expenses > 0 or with notes in the current month
+  const peopleToInclude = state.persons.filter(person => {
+    const cards = state.cards.filter(c => byPerson[person][c]?.total > 0);
+    const total = cards.reduce((s,c) => s+(byPerson[person][c]?.total||0), 0);
+    const noteObj = state.anotacoes ? state.anotacoes.find(n => n.pessoa === person && n.mes_id === state.currentMonth) : null;
+    const noteText = noteObj ? noteObj.texto.trim() : '';
+    return total > 0 || noteText !== '';
+  });
+
+  if (!peopleToInclude.length) { toast('Nenhum gasto ou anotação encontrado para este mês.', 'warning'); return; }
+
+  let textLines = [];
+  textLines.push(`--------------------------------------*${rawMonth}*------------------------------------\n`);
+
+  peopleToInclude.forEach(person => {
+    const cards = state.cards.filter(c => byPerson[person][c]?.total > 0);
+    const total = cards.reduce((s,c) => s+(byPerson[person][c]?.total||0), 0);
+    const noteObj = state.anotacoes ? state.anotacoes.find(n => n.pessoa === person && n.mes_id === state.currentMonth) : null;
+    const noteText = noteObj ? noteObj.texto.trim() : '';
+
+    let line = '';
+    if (total > 0) {
+      line = `${person} deve *R$ ${fmt(total)}*`;
+      if (noteText) {
+        // If note text already has a dash, just add a space, otherwise prepend a separator
+        const separator = (noteText.startsWith('-') || noteText.startsWith('—')) ? ' ' : ' - ';
+        line += `${separator}${noteText}`;
+      }
+    } else {
+      line = `${person} - ${noteText}`;
+    }
+    textLines.push(line);
+  });
+
+  const textToCopy = textLines.join('\n\n');
+
+  navigator.clipboard.writeText(textToCopy).then(() => {
+    toast('Relatório copiado para o WhatsApp!', 'success');
+  }).catch(err => {
+    console.error('Erro ao copiar:', err);
+    toast('Erro ao copiar texto.', 'error');
+  });
+}

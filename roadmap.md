@@ -22,12 +22,12 @@ Este arquivo serve como um painel de ideias, melhorias futuras e pendências (ba
 ## 📋 Backlog de Ajustes Imediatos
 
 - [ ] **Limpeza de Autocompletes Poluídos**: Desativar histórico automático (`autocomplete="off"`) em campos de inputs para evitar sugestões do navegador poluindo a tela.
-- [ ] **Ano Vigente Automático para Novos Usuários**: Configurar o ano corrente automaticamente na criação de um novo perfil (evitando a necessidade de clicar em "+ Novo Ano").
-- [ ] **Mês Vigente em "Em Outros"**: Garantir que a tela "Em Outros" inicialize automaticamente pré-selecionada no mês corrente, idêntico à tela de Lançamentos.
-- [ ] **Seleção de Amigos nas Caixinhas**: Substituir o campo de texto para convidar amigo em Caixinhas por uma caixa de seleção contendo apenas os amigos já vinculados.
+- [x] **Ano Vigente Automático para Novos Usuários**: Configurar o ano corrente automaticamente na criação de um novo perfil (evitando a necessidade de clicar em "+ Novo Ano").
+- [x] **Mês Vigente em "Em Outros"**: Garantir que a tela "Em Outros" inicialize automaticamente pré-selecionada no mês corrente, idêntico à tela de Lançamentos.
+- [x] **Seleção de Amigos nas Caixinhas**: Substituir o campo de texto para convidar amigo em Caixinhas por uma caixa de seleção contendo apenas os amigos já vinculados.
 - [ ] **Tabelas Retráteis em "Por Cartão"**: Permitir expandir ou colapsar cada tabela de gastos dos cartões na aba "Por Cartão" (comportamento igual ao da tela "Por Pessoa").
-- [ ] **Organizar por ordem os meses e anos"**: Adicionei alguns gastos anteriores e os meses ficaram fora de ordem. Colocar funcionalidade de sempre manter os meses em ordem padrão. Assim como is anos".
-- [ ] **Anos anteriores agrupados"**: A primeira aba onde mostram os anos deve ter uma aba de "Anos Anteriores" para agrupar todos os anos que nao fazem parte do ano vigente..
+- [x] **Organizar por ordem os meses e anos**: Adicionei alguns gastos anteriores e os meses ficaram fora de ordem. Colocar funcionalidade de sempre manter os meses em ordem padrão. Assim como os anos.
+- [x] **Anos anteriores agrupados**: A primeira aba onde mostram os anos deve ter uma aba de "Anos Anteriores" para agrupar todos os anos que não fazem parte do ano vigente.
 
 ---
 
