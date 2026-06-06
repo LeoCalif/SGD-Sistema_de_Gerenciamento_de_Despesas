@@ -16,7 +16,14 @@ async function loadAll() {
   state.cards   = (cartoes || []).map(c => c.nome);
   state.months  = meses || [];
 
-  // No auto-creation — user creates years manually via the button
+  // Se o usuário não tiver nenhum mês cadastrado (novo usuário), cria o ano corrente automaticamente
+  if (!state.months || state.months.length === 0) {
+    const currentYear = new Date().getFullYear();
+    await createYearSilent(currentYear);
+    const { data: updatedMeses } = await db.from('meses').select('*').eq('user_id', currentUser.id).order('created_at');
+    state.months = updatedMeses || [];
+  }
+  sortMonthsChronologically(state.months);
 
   // Try to find current month (e.g. "Junho/2026")
   const now      = new Date();
@@ -88,10 +95,23 @@ async function createYearSilent(year) {
 
   // Add to state in order
   data.forEach(m => state.months.push(m));
-  // Re-sort by created_at to keep order
-  state.months.sort((a,b) => new Date(a.created_at) - new Date(b.created_at));
+  sortMonthsChronologically(state.months);
 
   return data.length;
+}
+
+// Cria os meses do ano de referência para um novo usuário cadastrado
+async function createYearForNewUser(newUserId, year) {
+  const monthsPt = [
+    'Janeiro','Fevereiro','Março','Abril','Maio','Junho',
+    'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'
+  ];
+  const toCreate = monthsPt.map(m => `${m}/${year}`);
+  const inserts = toCreate.map(nome => ({ nome, user_id: newUserId }));
+  const { error } = await db.from('meses').insert(inserts);
+  if (error) {
+    console.error("Erro ao criar ano corrente para novo usuário:", error);
+  }
 }
 
 function openNewYearModal() {
@@ -132,7 +152,7 @@ async function createYear() {
   if (error || !data) { toast('Erro ao criar meses.', 'error'); setSyncStatus(true); return; }
 
   data.forEach(m => state.months.push(m));
-  state.months.sort((a,b) => new Date(a.created_at) - new Date(b.created_at));
+  sortMonthsChronologically(state.months);
 
   // Navigate to Janeiro of the created year
   const janeiro = state.months.find(m => m.nome === `Janeiro/${year}`);
@@ -580,7 +600,11 @@ async function findOrCreateMonth(name) {
   let month = state.months.find(m => m.nome.toLowerCase() === name.toLowerCase());
   if (!month) {
     const { data } = await db.from('meses').insert(withOwner({ nome: name })).select().single();
-    if (data) { state.months.push(data); month = data; }
+    if (data) {
+      state.months.push(data);
+      sortMonthsChronologically(state.months);
+      month = data;
+    }
   }
   return month;
 }
@@ -630,7 +654,7 @@ async function createCaixinha() {
   const nome  = document.getElementById('cx-nome').value.trim();
   const descricao = document.getElementById('cx-descricao').value.trim();
   const meta  = parseFloat(document.getElementById('cx-meta').value) || null;
-  const usernameAmigo = document.getElementById('cx-amigo').value.trim().toLowerCase();
+  const amigoUserId = document.getElementById('cx-amigo').value;
 
   if (!nome) { toast('Dê um nome à caixinha.', 'error'); return; }
 
@@ -656,22 +680,11 @@ async function createCaixinha() {
   // Add self as member
   await db.from('caixinha_membros').insert({ caixinha_id: cx.id, user_id: currentUser.id });
 
-  // Add friend if provided
-  if (usernameAmigo) {
-    const { data: profile, error: pError } = await db
-      .from('profiles')
-      .select('id')
-      .ilike('username', usernameAmigo)
-      .maybeSingle();
-
-    if (pError) {
-      console.error("Erro ao buscar perfil do amigo na caixinha:", pError);
-    }
-
-    if (profile) {
-      await db.from('caixinha_membros').insert({ caixinha_id: cx.id, user_id: profile.id });
-    } else {
-      toast(`Usuário "${usernameAmigo}" não encontrado — caixinha criada sem ele.`, 'warning');
+  // Add friend if selected
+  if (amigoUserId) {
+    const { error: mError } = await db.from('caixinha_membros').insert({ caixinha_id: cx.id, user_id: amigoUserId });
+    if (mError) {
+      console.error("Erro ao adicionar amigo na caixinha:", mError);
     }
   }
 
@@ -719,45 +732,18 @@ async function updateCaixinha(id) {
 }
 
 async function adicionarMembroCaixinha(caixinhaId) {
-  const input = document.getElementById('cx-add-membro-input');
-  const username = input?.value.trim().toLowerCase();
+  const select = document.getElementById('cx-add-membro-select');
+  const userId = select?.value;
 
-  if (!username) { toast('Digite o username do amigo.', 'error'); return; }
+  if (!userId) { toast('Selecione um amigo.', 'error'); return; }
 
   const btn = document.getElementById('cx-add-membro-btn');
   if (btn) { btn.disabled = true; }
 
-  // Check if user is already a member
-  const currentCx = state.caixinhas.find(c => c.id === caixinhaId);
-  if (currentCx) {
-    const alreadyMember = currentCx.membros.some(m => {
-      const uName = usernameCache[m.user_id]?.toLowerCase();
-      return uName === username;
-    });
-    if (alreadyMember) {
-      toast('Este usuário já é membro da caixinha.', 'warning');
-      if (btn) btn.disabled = false;
-      return;
-    }
-  }
-
-  // Fetch friend's profile
-  const { data: profile, error: pError } = await db
-    .from('profiles')
-    .select('id')
-    .ilike('username', username)
-    .maybeSingle();
-
-  if (pError || !profile) {
-    toast(`Usuário "${username}" não encontrado.`, 'error');
-    if (btn) btn.disabled = false;
-    return;
-  }
-
   // Insert into caixinha_membros
   const { error } = await db.from('caixinha_membros').insert({
     caixinha_id: caixinhaId,
-    user_id: profile.id
+    user_id:     userId
   });
 
   if (btn) btn.disabled = false;
@@ -768,7 +754,6 @@ async function adicionarMembroCaixinha(caixinhaId) {
     return;
   }
 
-  if (input) input.value = '';
   await loadCaixinhas();
   toast('Membro adicionado com sucesso!', 'success');
   renderCaixinhas();
@@ -1048,6 +1033,10 @@ async function adicionarNovoUsuario() {
     if (profileErr) {
       throw new Error(profileErr.message);
     }
+
+    // 5. Configurar o ano corrente automaticamente na criação do perfil
+    const currentYear = new Date().getFullYear();
+    await createYearForNewUser(newUserId, currentYear);
 
     // Clear fields
     document.getElementById('adm-new-username').value = '';

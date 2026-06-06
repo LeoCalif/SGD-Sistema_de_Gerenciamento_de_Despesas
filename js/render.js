@@ -15,6 +15,13 @@ function goTo(page) {
   if (newYearBtn)    newYearBtn.classList.toggle('hidden', hideTopbar);
   if (deleteYearBtn) deleteYearBtn.classList.toggle('hidden', hideTopbar);
   if (pdfBtn) pdfBtn.style.display = page === 'resumo' ? 'flex' : 'none';
+  
+  if (page === 'compartilhados') {
+    state.currentSharedYear = null;
+    state.currentSharedMonth = null;
+    state.currentSharedCard = null;
+  }
+
   // Close sidebar on mobile after nav
   closeSidebar();
   renderPage(page);
@@ -63,29 +70,76 @@ function renderYearTabs(containerId, monthSelectorId) {
     yearsMap[y].push(m);
   });
 
-  const years = Object.keys(yearsMap).sort().reverse();
+  // Sort years (numeric descending, and "Outros" at the end)
+  const years = Object.keys(yearsMap).sort((a, b) => {
+    if (a === 'Outros') return 1;
+    if (b === 'Outros') return -1;
+    return parseInt(b) - parseInt(a);
+  });
 
   // Determine active year (from currentMonth)
   const currentMonthObj = state.months.find(m => m.id === state.currentMonth);
   let activeYear = currentMonthObj ? extractYear(currentMonthObj.nome) : years[0];
   if (!yearsMap[activeYear]) activeYear = years[0];
 
+  const currentYear = new Date().getFullYear().toString();
+  const hasCurrentYear = yearsMap[currentYear] !== undefined;
+  const previousYears = years.filter(y => y !== currentYear && y !== 'Outros');
+  const hasOutros = yearsMap['Outros'] !== undefined;
+
   // Render year tabs
   yearTabsEl.innerHTML = '';
-  years.forEach(y => {
+
+  // 1. Current Year Tab
+  if (hasCurrentYear) {
     const btn = document.createElement('button');
-    btn.className = 'year-tab' + (y === activeYear ? ' active' : '');
-    btn.textContent = y;
+    btn.className = 'year-tab' + (currentYear === activeYear ? ' active' : '');
+    btn.textContent = currentYear;
     btn.onclick = () => {
-      // Switch to most recent month of that year
-      const monthsOfYear = yearsMap[y];
-      const target = monthsOfYear[monthsOfYear.length - 1];
-      state.currentMonth = target.id;
-      state.currentCard  = state.cards[0] || null;
-      loadGastos().then(() => renderPage(currentPage));
+      selectYear(currentYear);
     };
     yearTabsEl.appendChild(btn);
-  });
+  }
+
+  // 2. Previous Years Dropdown Select Tab
+  if (previousYears.length > 0) {
+    const isPrevActive = previousYears.includes(activeYear);
+    const select = document.createElement('select');
+    select.className = 'year-tab year-tab-select' + (isPrevActive ? ' active' : '');
+    
+    // Default unselected label option
+    const defOpt = document.createElement('option');
+    defOpt.value = '';
+    defOpt.disabled = true;
+    defOpt.selected = !isPrevActive;
+    defOpt.textContent = 'Anos Anteriores';
+    select.appendChild(defOpt);
+
+    previousYears.forEach(y => {
+      const opt = document.createElement('option');
+      opt.value = y;
+      opt.selected = (y === activeYear);
+      opt.textContent = y;
+      select.appendChild(opt);
+    });
+
+    select.onchange = (e) => {
+      const val = e.target.value;
+      if (val) selectYear(val);
+    };
+    yearTabsEl.appendChild(select);
+  }
+
+  // 3. Outros Tab
+  if (hasOutros) {
+    const btn = document.createElement('button');
+    btn.className = 'year-tab' + (activeYear === 'Outros' ? ' active' : '');
+    btn.textContent = 'Outros';
+    btn.onclick = () => {
+      selectYear('Outros');
+    };
+    yearTabsEl.appendChild(btn);
+  }
 
   // Render months of active year
   monthEl.innerHTML = '';
@@ -103,7 +157,14 @@ function renderYearTabs(containerId, monthSelectorId) {
     monthEl.appendChild(btn);
   });
 
-  // No individual month creation — managed by year
+  // Helper to switch year
+  function selectYear(y) {
+    const monthsOfYear = yearsMap[y];
+    const target = monthsOfYear[monthsOfYear.length - 1];
+    state.currentMonth = target.id;
+    state.currentCard  = state.cards[0] || null;
+    loadGastos().then(() => renderPage(currentPage));
+  }
 }
 
 // ── LANÇAMENTOS ───────────────────────────────────────
@@ -527,7 +588,7 @@ function renderCaixinhas() {
   if (!state.caixinhas.length) {
     container.innerHTML = `
       <div style="display:flex;justify-content:flex-end;margin-bottom:20px">
-        <button class="btn primary" onclick="openModal('modal-nova-caixinha')">+ Nova Caixinha</button>
+        <button class="btn primary" onclick="openNovaCaixinhaModal()">+ Nova Caixinha</button>
       </div>
       <div class="empty-state">
         <div class="icon">💰</div>
@@ -563,7 +624,7 @@ function renderCaixinhas() {
 
   container.innerHTML = `
     <div style="display:flex;justify-content:flex-end;margin-bottom:20px">
-      <button class="btn primary" onclick="openModal('modal-nova-caixinha')">+ Nova Caixinha</button>
+      <button class="btn primary" onclick="openNovaCaixinhaModal()">+ Nova Caixinha</button>
     </div>
     <div class="caixinhas-grid">
       ${gridHtml}
@@ -638,10 +699,17 @@ function showCaixinhaDetail(id) {
     `;
   }).join('');
 
-  const addMemberFormHtml = isCriador ? `
-    <div style="margin-top:12px; display:flex; gap:8px;">
-      <input type="text" id="cx-add-membro-input" placeholder="Username do amigo..." style="flex:1; padding:6px 10px; font-size:12px; background:var(--bg3); border:1px solid var(--border); border-radius:var(--radius); color:var(--text);" onkeydown="if(event.key==='Enter')adicionarMembroCaixinha('${cx.id}')">
-      <button class="btn primary sm" id="cx-add-membro-btn" onclick="adicionarMembroCaixinha('${cx.id}')" style="padding: 6px 12px; font-size:12px;">Convidar</button>
+  // Filter friends that are NOT already in the caixinha members list
+  const memberUserIds = new Set(cx.membros.map(m => m.user_id));
+  const availableFriends = state.personsData.filter(p => p.vinculo_user_id !== null && !memberUserIds.has(p.vinculo_user_id));
+
+  const addMemberFormHtml = isCriador && availableFriends.length > 0 ? `
+    <div style="margin-top:12px; display:flex; gap:8px; align-items:center;">
+      <select id="cx-add-membro-select" style="flex:1; padding:6px 10px; font-size:12px; background:var(--bg3); border:1px solid var(--border); border-radius:var(--radius); color:var(--text); height:31px;">
+        <option value="">Selecionar amigo...</option>
+        ${availableFriends.map(p => `<option value="${p.vinculo_user_id}">${esc(p.nome)}</option>`).join('')}
+      </select>
+      <button class="btn primary sm" id="cx-add-membro-btn" onclick="adicionarMembroCaixinha('${cx.id}')" style="padding: 6px 12px; font-size:12px; height:31px;">Convidar</button>
     </div>
   ` : '';
 
@@ -857,8 +925,11 @@ function renderCompartilhados() {
   });
   const years = Object.keys(yearsMap).sort().reverse();
 
+  // Try to pre-select system's active year
   if (!state.currentSharedYear || !years.includes(state.currentSharedYear)) {
-    state.currentSharedYear = years[0] || null;
+    const systemMonthName = state.months.find(m => m.id === state.currentMonth)?.nome;
+    const systemYear = systemMonthName ? extractYear(systemMonthName) : null;
+    state.currentSharedYear = (systemYear && years.includes(systemYear)) ? systemYear : (years[0] || null);
   }
 
   // Get months in active year
@@ -881,8 +952,11 @@ function renderCompartilhados() {
     return MESES_PT.indexOf(ma) - MESES_PT.indexOf(mb);
   });
 
+  // Try to pre-select system's active month by name
   if (!state.currentSharedMonth || !months.some(m => m.id === state.currentSharedMonth)) {
-    state.currentSharedMonth = months[months.length - 1]?.id || null;
+    const systemMonthName = state.months.find(m => m.id === state.currentMonth)?.nome;
+    const matchedMonth = systemMonthName ? months.find(m => m.nome.toLowerCase() === systemMonthName.toLowerCase()) : null;
+    state.currentSharedMonth = matchedMonth?.id || months[months.length - 1]?.id || null;
   }
 
   // Filter active month gastos
@@ -1019,4 +1093,14 @@ function renderCompartilhados() {
 
     ${tableHtml}
   `;
+}
+
+function openNovaCaixinhaModal() {
+  const select = document.getElementById('cx-amigo');
+  if (select) {
+    const friends = state.personsData.filter(p => p.vinculo_user_id !== null);
+    select.innerHTML = '<option value="">Nenhum (somente você)</option>' + 
+      friends.map(p => `<option value="${p.vinculo_user_id}">${esc(p.nome)}</option>`).join('');
+  }
+  openModal('modal-nova-caixinha');
 }

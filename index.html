@@ -422,8 +422,10 @@
       <input type="number" id="cx-meta" placeholder="Ex: 10000" step="0.01">
     </div>
     <div class="field">
-      <label>Convidar usuário <span class="hint">(opcional — ex: danny)</span></label>
-      <input type="text" id="cx-amigo" placeholder="username do participante">
+      <label>Convidar participante <span class="hint">(opcional)</span></label>
+      <select id="cx-amigo">
+        <option value="">Nenhum (somente você)</option>
+      </select>
     </div>
     <div class="modal-actions">
       <button class="btn" onclick="closeModal('modal-nova-caixinha')">Cancelar</button>

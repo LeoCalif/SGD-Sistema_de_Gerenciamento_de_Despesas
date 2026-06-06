@@ -93,3 +93,19 @@ function descLabel(desc) {
 function parcLabel(parcelas) {
   return parcelas > 1 ? `${parcelas}x` : 'À vista';
 }
+
+// ── CHRONOLOGICAL MONTH SORTING ───────────────────────
+function sortMonthsChronologically(monthsList) {
+  const MESES_PT = [
+    'Janeiro','Fevereiro','Março','Abril','Maio','Junho',
+    'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'
+  ];
+  monthsList.sort((a, b) => {
+    const partsA = a.nome.split('/');
+    const partsB = b.nome.split('/');
+    const yearA = parseInt(partsA[1]) || 0;
+    const yearB = parseInt(partsB[1]) || 0;
+    if (yearA !== yearB) return yearA - yearB;
+    return MESES_PT.indexOf(partsA[0]) - MESES_PT.indexOf(partsB[0]);
+  });
+}
