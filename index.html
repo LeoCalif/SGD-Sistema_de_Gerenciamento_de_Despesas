@@ -160,11 +160,15 @@
         <div class="table-card">
           <div class="table-card-header">
             <h2 id="table-title">Gastos</h2>
-            <div><span class="total-label">Total do cartão:</span>
-              <span class="total-value" id="card-total">R$ 0,00</span></div>
+            <div style="display:flex; align-items:center; gap:12px;">
+              <button class="btn danger sm hidden" id="btn-delete-selected" onclick="deleteSelectedGastos()">🗑 Apagar Selecionados (<span id="selected-count">0</span>)</button>
+              <div><span class="total-label">Total do cartão:</span>
+                <span class="total-value" id="card-total">R$ 0,00</span></div>
+            </div>
           </div>
           <div class="scrollable">
             <table><thead><tr>
+              <th class="checkbox-cell"><input type="checkbox" id="select-all-gastos" onchange="toggleSelectAllGastos(this)"></th>
               <th>Descrição</th><th>Pessoa</th><th>Parcelas</th>
               <th style="text-align:right">Valor</th><th></th>
             </tr></thead><tbody id="items-tbody"></tbody></table>

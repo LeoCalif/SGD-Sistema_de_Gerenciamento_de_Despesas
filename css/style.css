@@ -283,6 +283,7 @@ body {
 .total-value { font-size: 16px; font-weight: 700; color: var(--accent); font-family: var(--font-display); margin-left: 8px; }
 
 table             { width: 100%; border-collapse: collapse; }
+.checkbox-cell    { width: 40px; text-align: center; }
 thead th          { padding: 10px 14px; text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text3); border-bottom: 1px solid var(--border); background: var(--bg3); font-weight: 500; }
 tbody tr          { border-bottom: 1px solid var(--border); transition: background 0.1s; }
 tbody tr:last-child { border-bottom: none; }
@@ -459,8 +460,10 @@ tbody td          { padding: 10px 14px; font-size: 13px; }
   .settings-grid { grid-template-columns: 1fr; }
 
   /* Hide table columns on small screens */
-  table thead th:nth-child(3),
-  table tbody td:nth-child(3) { display: none; }
+  #page-lancamento table thead th:nth-child(4),
+  #page-lancamento table tbody td:nth-child(4),
+  #page-cartoes-view table thead th:nth-child(3),
+  #page-cartoes-view table tbody td:nth-child(3) { display: none; }
 
   /* Toast bottom center */
   #toast { right: 16px; left: 16px; bottom: 16px; text-align: center; }

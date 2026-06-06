@@ -25,6 +25,9 @@ async function loadAll() {
   }
   sortMonthsChronologically(state.months);
 
+  // Propaga parcelas pendentes para todos os meses globalmente ao carregar
+  await propagateAllInstallments();
+
   // Try to find current month (e.g. "Junho/2026")
   const now      = new Date();
   const mesesPt  = [
@@ -36,7 +39,12 @@ async function loadAll() {
   state.currentMonth = found?.id || state.months[state.months.length - 1]?.id || null;
   state.currentCard  = state.cards[0] || null;
 
-  if (state.currentMonth) await loadGastos();
+  // Carrega todos os gastos, caixinhas e despesas compartilhadas em paralelo antes de ir para a página inicial
+  await Promise.all([
+    state.currentMonth ? loadGastos() : Promise.resolve(),
+    loadCaixinhas(),
+    loadSharedGastos()
+  ]);
 
   if (currentUser.role === 'visualizador') {
     goTo('compartilhados');
@@ -262,6 +270,85 @@ async function propagateParcelasToMonth(mesId) {
   }
 }
 
+// Global batch propagation of installment expenses in memory
+async function propagateAllInstallments(newGasto = null) {
+  if (!currentUser || currentUser.role === 'visualizador') return;
+
+  // Fetch all user's installment gastos (parcelados)
+  const { data: allGastos, error } = await db
+    .from('gastos')
+    .select('*')
+    .eq('user_id', currentUser.id)
+    .or('parcelas.gt.1,parcela_atual.gt.1');
+
+  if (error || !allGastos) {
+    console.error("Erro ao buscar gastos parcelados para propagação global:", error);
+    return;
+  }
+
+  // Se um novo gasto foi fornecido, garante que ele está na lista para evitar atraso de replicação do banco
+  if (newGasto && !allGastos.some(g => g.id === newGasto.id)) {
+    allGastos.push(newGasto);
+  }
+
+  const toInsert = [];
+  const localGastos = [...allGastos];
+
+  // Loop sequentially starting from month 1 (index 1) to month N
+  for (let i = 1; i < state.months.length; i++) {
+    const prevMes = state.months[i-1];
+    const currMes = state.months[i];
+
+    // Get active installments in previous month
+    const prevGastos = localGastos.filter(g => g.mes_id === prevMes.id);
+
+    // Get active installments in current month
+    const currGastos = localGastos.filter(g => g.mes_id === currMes.id);
+
+    // Check each installment from the previous month
+    prevGastos.forEach(g => {
+      const totalParcelas = g.parcelas || 1;
+      const parcelaAtual = g.parcela_atual || 1;
+
+      if (totalParcelas > 1 && parcelaAtual < totalParcelas) {
+        const targetOrigem = g.parcela_origem || g.id;
+        const targetParcelaAtual = parcelaAtual + 1;
+
+        // Check if current month already contains this installment of the chain
+        const exists = currGastos.some(cg =>
+          (cg.parcela_origem === targetOrigem || cg.id === targetOrigem) &&
+          cg.parcela_atual === targetParcelaAtual
+        );
+
+        if (!exists) {
+          const newGasto = withOwner({
+            mes_id:         currMes.id,
+            cartao:         g.cartao,
+            pessoa:         g.pessoa,
+            descricao:      g.descricao || '',
+            valor:          g.valor,
+            parcelas:       totalParcelas,
+            parcela_atual:  targetParcelaAtual,
+            parcela_origem: targetOrigem,
+          });
+
+          toInsert.push(newGasto);
+          localGastos.push(newGasto); // add to local copy so it can propagate to subsequent months in loop
+        }
+      }
+    });
+  }
+
+  if (toInsert.length > 0) {
+    const { error: insertErr } = await db.from('gastos').insert(toInsert);
+    if (insertErr) {
+      console.error("Erro ao inserir parcelas propagadas em lote:", insertErr);
+    } else {
+      console.log(`[Propagação Global] ${toInsert.length} parcelas propagadas com sucesso.`);
+    }
+  }
+}
+
 // ── GASTOS ────────────────────────────────────────────
 async function addItem() {
   const desc     = document.getElementById('f-desc').value.trim();
@@ -294,6 +381,10 @@ async function addItem() {
   document.getElementById('f-desc').value  = '';
   document.getElementById('f-valor').value = '';
   document.getElementById('f-desc').focus();
+
+  if (data.parcelas > 1) {
+    await propagateAllInstallments(data);
+  }
 
   toast('Gasto adicionado!', 'success');
   renderItemsTable();
@@ -353,6 +444,74 @@ async function deleteItem(id) {
   setSyncStatus(true);
 }
 
+async function deleteSelectedGastos() {
+  const checked = document.querySelectorAll('.gasto-checkbox:checked');
+  if (checked.length === 0) return;
+
+  const ids = Array.from(checked).map(cb => cb.getAttribute('data-id'));
+  
+  // Verifica se há gastos parcelados selecionados para alertar o usuário
+  const selectedGastos = state.gastos.filter(g => ids.includes(g.id));
+  const hasInstallment = selectedGastos.some(g => g.parcelas > 1);
+
+  let msg = `Deseja apagar os ${ids.length} gastos selecionados?`;
+  if (hasInstallment) {
+    msg = `Atenção: Um ou mais dos gastos selecionados são parcelados. Ao confirmar, todas as parcelas desses gastos (tanto a atual quanto as futuras) também serão excluídas nos outros meses. Deseja continuar?`;
+  }
+
+  if (!confirm(msg)) return;
+
+  setSyncStatus(false);
+
+  // Resolve as cadeias de parcelas dos gastos parcelados selecionados
+  const installmentOrigins = new Set();
+  const simpleIdsToDelete = [];
+
+  selectedGastos.forEach(g => {
+    if (g.parcelas > 1) {
+      installmentOrigins.add(g.parcela_origem || g.id);
+    } else {
+      simpleIdsToDelete.push(g.id);
+    }
+  });
+
+  let allIdsToDelete = [...simpleIdsToDelete];
+
+  if (installmentOrigins.size > 0) {
+    const originsArray = [...installmentOrigins];
+    // Monta a consulta de OR para todas as origens
+    const orFilter = originsArray.map(orig => `parcela_origem.eq.${orig},id.eq.${orig}`).join(',');
+    const { data: allRelated } = await db
+      .from('gastos')
+      .select('id')
+      .or(orFilter);
+
+    if (allRelated) {
+      allRelated.forEach(g => allIdsToDelete.push(g.id));
+    }
+  }
+
+  // Remove duplicatas
+  allIdsToDelete = [...new Set(allIdsToDelete)];
+
+  const { error } = await db.from('gastos').delete().in('id', allIdsToDelete);
+
+  if (error) {
+    toast('Erro ao remover os gastos selecionados.', 'error');
+    setSyncStatus(true);
+    return;
+  }
+
+  // Remove do estado local
+  state.gastos = state.gastos.filter(g => !allIdsToDelete.includes(g.id));
+
+  toast(`${ids.length} gasto(s) removido(s) com sucesso.`, 'success');
+  renderItemsTable();
+  renderCardChips();
+  updateBadges();
+  setSyncStatus(true);
+}
+
 async function saveEdit() {
   const id       = document.getElementById('edit-id').value;
   const desc     = document.getElementById('edit-desc').value.trim();
@@ -378,6 +537,11 @@ async function saveEdit() {
 
   closeModal('modal-edit');
   toast('Gasto atualizado!', 'success');
+
+  if (data.parcelas > 1) {
+    await propagateAllInstallments(data);
+  }
+
   renderItemsTable();
   renderCardChips();
   setSyncStatus(true);

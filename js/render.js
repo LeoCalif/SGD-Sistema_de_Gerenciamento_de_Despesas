@@ -56,7 +56,9 @@ function renderPage(p) {
   else if (p === 'resumo')       renderResumo();
   else if (p === 'cartoes-view') renderCartoesView();
   else if (p === 'caixinhas')    renderCaixinhas();
-  else if (p === 'compartilhados') renderCompartilhados();
+  else if (p === 'compartilhados') {
+    loadSharedGastos().then(() => renderCompartilhados());
+  }
   else if (p === 'config')       renderConfig();
   updateBadges();
 }
@@ -245,6 +247,10 @@ function renderItemsTable() {
   const total = items.reduce((s,g) => s+Number(g.valor), 0);
   document.getElementById('table-title').textContent = 'Gastos — '+(state.currentCard||'');
   document.getElementById('card-total').textContent  = 'R$ '+fmt(total);
+
+  // Reset bulk delete button and master checkbox on refresh
+  updateBulkDeleteState();
+
   if (!items.length) { tbody.innerHTML=''; empty.classList.remove('hidden'); return; }
   empty.classList.add('hidden');
   tbody.innerHTML = items.map(g => {
@@ -254,6 +260,9 @@ function renderItemsTable() {
       ? `<span style="font-weight:600">${pAtual}/${g.parcelas}x</span>`
       : 'À vista';
     return `<tr>
+      <td class="checkbox-cell">
+        <input type="checkbox" class="gasto-checkbox" data-id="${g.id}" onchange="onGastoCheckboxChange()">
+      </td>
       <td>${descLabel(g.descricao)}</td>
       <td><span class="pill" style="background:${pc}22;color:${pc}">${esc(g.pessoa)}</span></td>
       <td style="color:var(--text3)">${pLabel}</td>
@@ -264,6 +273,37 @@ function renderItemsTable() {
       </div></td>
     </tr>`;
   }).join('');
+}
+
+function toggleSelectAllGastos(master) {
+  const checkboxes = document.querySelectorAll('.gasto-checkbox');
+  checkboxes.forEach(cb => cb.checked = master.checked);
+  updateBulkDeleteState();
+}
+
+function onGastoCheckboxChange() {
+  updateBulkDeleteState();
+}
+
+function updateBulkDeleteState() {
+  const checkboxes = document.querySelectorAll('.gasto-checkbox');
+  const checked = document.querySelectorAll('.gasto-checkbox:checked');
+  const master = document.getElementById('select-all-gastos');
+  
+  if (master) {
+    master.checked = checkboxes.length > 0 && checked.length === checkboxes.length;
+  }
+  
+  const btn = document.getElementById('btn-delete-selected');
+  const countEl = document.getElementById('selected-count');
+  if (btn && countEl) {
+    if (checked.length > 0) {
+      countEl.textContent = checked.length;
+      btn.classList.remove('hidden');
+    } else {
+      btn.classList.add('hidden');
+    }
+  }
 }
 
 // ── EDIT MODAL ────────────────────────────────────────

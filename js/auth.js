@@ -1,4 +1,3 @@
-// ── AUTH ──────────────────────────────────────────────
 async function checkSession() {
   const { data: { session } } = await db.auth.getSession();
   if (session) {
@@ -16,10 +15,8 @@ async function checkSession() {
 
     currentUser.username = profile?.username || session.user.email;
     currentUser.role = profile?.role || 'user';
-    showApp(currentUser.username);
     await loadAll();
-    await loadCaixinhas();
-    await loadSharedGastos();
+    showApp(currentUser.username);
   } else {
     showLogin();
   }
@@ -96,10 +93,8 @@ async function doLogin() {
 
   currentUser.username = userProfile?.username || data.user.email;
   currentUser.role = userProfile?.role || 'user';
-  showApp(currentUser.username);
   await loadAll();
-  await loadCaixinhas();
-  await loadSharedGastos();
+  showApp(currentUser.username);
 }
 
 async function doLogout() {
