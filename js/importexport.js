@@ -597,3 +597,226 @@ async function copyReportToWhatsapp() {
     toast('Erro ao copiar texto.', 'error');
   });
 }
+
+// ── EXPORTAR PNG POR PESSOA ───────────────────────────
+function openPngExportModal() {
+  if (!state.gastos.length) {
+    toast('Sem dados para exportar.', 'error');
+    return;
+  }
+
+  const month = state.months.find(m => m.id === state.currentMonth);
+  const monthName = month?.nome || 'Mês';
+
+  const byPerson = {};
+  state.persons.forEach(p => { byPerson[p] = {}; });
+  state.gastos.forEach(g => {
+    if (!byPerson[g.pessoa]) byPerson[g.pessoa] = {};
+    if (!byPerson[g.pessoa][g.cartao]) byPerson[g.pessoa][g.cartao] = { total:0, items:[] };
+    byPerson[g.pessoa][g.cartao].total += Number(g.valor);
+    byPerson[g.pessoa][g.cartao].items.push(g);
+  });
+
+  const activePeople = state.persons.filter(person => {
+    const cards = state.cards.filter(c => byPerson[person][c]?.total > 0);
+    const total = cards.reduce((s,c) => s+(byPerson[person][c]?.total||0), 0);
+    const noteObj = state.anotacoes ? state.anotacoes.find(n => n.pessoa === person && n.mes_id === state.currentMonth) : null;
+    const noteText = noteObj ? noteObj.texto.trim() : '';
+    return total > 0 || noteText !== '';
+  });
+
+  if (!activePeople.length) {
+    toast('Nenhum gasto ou anotação encontrado para este mês.', 'warning');
+    return;
+  }
+
+  const listEl = document.getElementById('export-png-list');
+  if (!listEl) return;
+
+  listEl.innerHTML = activePeople.map(person => {
+    return `
+      <label style="display:flex; align-items:center; gap:8px; cursor:pointer; user-select:none; font-size:13px; color:var(--text2);">
+        <input type="checkbox" class="export-png-checkbox" value="${esc(person)}" onchange="onPngCheckboxChange()" checked>
+        ${esc(person)}
+      </label>
+    `;
+  }).join('');
+
+  const selectAll = document.getElementById('export-png-select-all');
+  if (selectAll) {
+    selectAll.checked = true;
+  }
+
+  openModal('modal-export-png');
+}
+
+function toggleSelectAllPngExport(master) {
+  const checkboxes = document.querySelectorAll('.export-png-checkbox');
+  checkboxes.forEach(cb => cb.checked = master.checked);
+}
+
+function onPngCheckboxChange() {
+  const checkboxes = document.querySelectorAll('.export-png-checkbox');
+  const checked = document.querySelectorAll('.export-png-checkbox:checked');
+  const selectAll = document.getElementById('export-png-select-all');
+  if (selectAll) {
+    selectAll.checked = checkboxes.length > 0 && checked.length === checkboxes.length;
+  }
+}
+
+async function exportSelectedPngs() {
+  const checkedBoxes = document.querySelectorAll('.export-png-checkbox:checked');
+  if (!checkedBoxes.length) {
+    toast('Selecione pelo menos uma pessoa para exportar.', 'warning');
+    return;
+  }
+
+  const btn = document.getElementById('btn-confirm-export-png');
+  const originalText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Gerando...';
+
+  const month = state.months.find(m => m.id === state.currentMonth);
+  const monthName = month?.nome || 'Mês';
+
+  const byPerson = {};
+  state.persons.forEach(p => { byPerson[p] = {}; });
+  state.gastos.forEach(g => {
+    if (!byPerson[g.pessoa]) byPerson[g.pessoa] = {};
+    if (!byPerson[g.pessoa][g.cartao]) byPerson[g.pessoa][g.cartao] = { total:0, items:[] };
+    byPerson[g.pessoa][g.cartao].total += Number(g.valor);
+    byPerson[g.pessoa][g.cartao].items.push(g);
+  });
+
+  const selectedPeople = Array.from(checkedBoxes).map(cb => cb.value);
+
+  closeModal('modal-export-png');
+
+  try {
+    for (const person of selectedPeople) {
+      const pc = getColor(state.persons, person);
+      const cards = state.cards.filter(c => byPerson[person][c]?.total > 0);
+      const total = cards.reduce((s,c) => s+(byPerson[person][c]?.total||0), 0);
+
+      const noteObj = state.anotacoes ? state.anotacoes.find(n => n.pessoa === person && n.mes_id === state.currentMonth) : null;
+      const noteText = noteObj ? noteObj.texto.trim() : '';
+      const noteHtml = noteText !== '' 
+        ? `<div class="export-card-note-box">
+            <div class="export-card-note-title">📝 Anotações do Mês</div>
+            <div class="export-card-note-text">${esc(noteText)}</div>
+           </div>`
+        : '';
+
+      const cardRowsHtml = cards.map(c => {
+        const cc = getColor(state.cards, c);
+        const data = byPerson[person][c];
+        
+        const itemsHtml = data.items.map(g => {
+          const pAt = g.parcela_atual || 1;
+          const badge = g.parcelas > 1
+            ? `<span class="parc-badge" style="background:${cc}18;color:${cc}">${pAt}/${g.parcelas}x</span>`
+            : `<span style="color:var(--text3)">À vista</span>`;
+          const dLabel = g.descricao
+            ? `<span class="export-card-detail-desc">${esc(g.descricao)}</span>`
+            : `<span class="export-card-detail-desc empty">sem descrição</span>`;
+          return `<div class="export-card-detail-item">
+            <div class="export-card-detail-left">
+              ${dLabel}
+              <div class="export-card-detail-parc">${badge}</div>
+            </div>
+            <span class="export-card-detail-valor" style="color:${Number(g.valor) < 0 ? 'var(--red)' : 'var(--green)'}">R$ ${fmt(Number(g.valor))}</span>
+          </div>`;
+        }).join('');
+
+        return `<div class="export-card-row">
+          <div class="export-card-row-header">
+            <span style="display:flex; align-items:center;">
+              <span class="color-dot" style="background:${cc}"></span>
+              ${esc(c)}
+            </span>
+            <span class="export-card-row-amount" style="color:${cc}">R$ ${fmt(data.total)}</span>
+          </div>
+          <div class="export-card-items-detail">
+            ${itemsHtml}
+          </div>
+        </div>`;
+      }).join('');
+
+      const container = document.createElement('div');
+      container.style.position = 'absolute';
+      container.style.left = '-9999px';
+      container.style.top = '0';
+      container.style.width = '440px';
+      container.style.zIndex = '-9999';
+
+      container.innerHTML = `
+        <div class="export-card-template">
+          <div class="export-card-logo-container">
+            <div class="export-card-logo-left">
+              <img src="assets/Klif%20Despesas.png" alt="Logo" style="height:22px; width:auto;">
+              <div>
+                <h1 class="export-card-logo-title">Klif Despesas</h1>
+                <div class="export-card-logo-sub">Controle de Gastos</div>
+              </div>
+            </div>
+            <div class="export-card-period">
+              Período: <strong>${monthName}</strong>
+            </div>
+          </div>
+          
+          <div class="export-card-person-header" style="justify-content: space-between; width: 100%;">
+            <div style="display: flex; align-items: center; gap: 12px;">
+              <div class="export-card-avatar" style="background:${pc}22; color:${pc}">
+                ${person.substring(0,2).toUpperCase()}
+              </div>
+              <div class="export-card-person-name">${esc(person)}</div>
+            </div>
+            <div class="export-card-total-badge" style="color:${pc}; background:${pc}12; border: 1px solid ${pc}40;">
+              R$ ${fmt(total)}
+            </div>
+          </div>
+          
+          <div class="export-card-cards-grid">
+            ${cardRowsHtml}
+          </div>
+          
+          ${noteHtml}
+          
+          <div class="export-card-footer">
+            Gerado em ${new Date().toLocaleDateString('pt-BR')} por Klif Despesas
+          </div>
+        </div>
+      `;
+
+      document.body.appendChild(container);
+
+      await new Promise(resolve => setTimeout(resolve, 150));
+
+      const canvas = await html2canvas(container, {
+        useCORS: true,
+        backgroundColor: '#0F172A',
+        scale: 2, 
+        logging: false
+      });
+
+      document.body.removeChild(container);
+
+      const imgData = canvas.toDataURL('image/png');
+      const a = document.createElement('a');
+      a.href = imgData;
+      const sanitizedName = person.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9_-]/g, "_");
+      const sanitizedMonth = monthName.replace('/', '-');
+      a.download = `klif-despesas-${sanitizedName}-${sanitizedMonth}.png`;
+      a.click();
+    }
+    
+    toast('Imagens exportadas com sucesso!', 'success');
+  } catch (err) {
+    console.error('Erro na exportação de PNG:', err);
+    toast('Erro ao gerar imagem.', 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = originalText;
+  }
+}
+

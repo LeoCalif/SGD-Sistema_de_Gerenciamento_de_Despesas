@@ -394,11 +394,11 @@ function renderResumo() {
     return `<div class="person-card" id="pcard-${esc(person)}">
       <div class="person-card-header" onclick="togglePerson('${esc(person)}')">
         <div class="person-avatar" style="background:${pc}22;color:${pc}">${person.substring(0,2).toUpperCase()}</div>
-        <div>
-          <div class="person-name">${esc(person)}${noteIndicator}</div>
-          <div class="person-total">Total: <span>R$ ${fmt(total)}</span></div>
+        <div style="flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px;">
+          <div class="person-name" style="margin: 0;">${esc(person)}${noteIndicator}</div>
         </div>
-        <span class="person-toggle ${isOpen?'open':''}">▼</span>
+        <div class="person-total-badge" style="color:${pc}; background:${pc}12; border: 1px solid ${pc}40;">R$ ${fmt(total)}</div>
+        <span class="person-toggle ${isOpen?'open':''}" style="margin-left: 8px;">▼</span>
       </div>
       <div class="card-breakdown person-summary${isOpen?'':' hidden'}">
         ${cardRows}

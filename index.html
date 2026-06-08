@@ -9,6 +9,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/style.css">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 </head>
 <body>
 
@@ -324,9 +325,37 @@
       <button class="btn success" onclick="copyReportToWhatsapp(); closeModal('modal-relatorio');" style="display:flex; align-items:center; justify-content:center; gap:8px; padding:12px; font-weight:600; width:100%;">
         💬 Copiar para WhatsApp
       </button>
+      <button class="btn primary" onclick="openPngExportModal(); closeModal('modal-relatorio');" style="display:flex; align-items:center; justify-content:center; gap:8px; padding:12px; font-weight:600; width:100%;">
+        🖼️ Exportar Individual em .png
+      </button>
     </div>
     <div class="modal-actions">
       <button class="btn" onclick="closeModal('modal-relatorio')" style="width:100%; justify-content:center;">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Exportar PNG por Pessoa -->
+<div class="modal-overlay hidden" id="modal-export-png">
+  <div class="modal">
+    <h3>🖼️ Exportar em .png</h3>
+    <p style="font-size:12px;color:var(--text3);margin-bottom:14px">
+      Selecione as pessoas que deseja exportar individualmente:
+    </p>
+    
+    <div style="background:rgba(15, 23, 42, 0.4); border:1px solid var(--border); border-radius:var(--radius); padding:12px; max-height:220px; overflow-y:auto; margin-bottom:16px;">
+      <label style="display:flex; align-items:center; gap:8px; font-weight:600; font-size:12px; border-bottom:1px solid var(--border); padding-bottom:8px; margin-bottom:8px; cursor:pointer; user-select:none;">
+        <input type="checkbox" id="export-png-select-all" onchange="toggleSelectAllPngExport(this)">
+        Selecionar Todos
+      </label>
+      <div id="export-png-list" style="display:flex; flex-direction:column; gap:8px;">
+        <!-- Gerado dinamicamente -->
+      </div>
+    </div>
+    
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal('modal-export-png')">Cancelar</button>
+      <button class="btn primary" id="btn-confirm-export-png" onclick="exportSelectedPngs()">Exportar</button>
     </div>
   </div>
 </div>
