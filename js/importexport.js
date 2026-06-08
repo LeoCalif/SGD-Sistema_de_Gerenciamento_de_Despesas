@@ -664,6 +664,95 @@ function onPngCheckboxChange() {
   }
 }
 
+function generatePersonCardHtml(person, monthName, byPerson) {
+  const pc = getColor(state.persons, person);
+  const cards = state.cards.filter(c => byPerson[person][c]?.total > 0);
+  const total = cards.reduce((s,c) => s+(byPerson[person][c]?.total||0), 0);
+
+  const noteObj = state.anotacoes ? state.anotacoes.find(n => n.pessoa === person && n.mes_id === state.currentMonth) : null;
+  const noteText = noteObj ? noteObj.texto.trim() : '';
+  const noteHtml = noteText !== '' 
+    ? `<div class="export-card-note-box">
+        <div class="export-card-note-title">📝 Anotações do Mês</div>
+        <div class="export-card-note-text">${esc(noteText)}</div>
+       </div>`
+    : '';
+
+  const cardRowsHtml = cards.map(c => {
+    const cc = getColor(state.cards, c);
+    const data = byPerson[person][c];
+    
+    const itemsHtml = data.items.map(g => {
+      const pAt = g.parcela_atual || 1;
+      const badge = g.parcelas > 1
+        ? `<span class="parc-badge" style="background:${cc}18;color:${cc}">${pAt}/${g.parcelas}x</span>`
+        : `<span style="color:var(--text3)">À vista</span>`;
+      const dLabel = g.descricao
+        ? `<span class="export-card-detail-desc">${esc(g.descricao)}</span>`
+        : `<span class="export-card-detail-desc empty">sem descrição</span>`;
+      return `<div class="export-card-detail-item">
+        <div class="export-card-detail-left">
+          ${dLabel}
+          <div class="export-card-detail-parc">${badge}</div>
+        </div>
+        <span class="export-card-detail-valor" style="color:${Number(g.valor) < 0 ? 'var(--red)' : 'var(--green)'}">R$ ${fmt(Number(g.valor))}</span>
+      </div>`;
+    }).join('');
+
+    return `<div class="export-card-row">
+      <div class="export-card-row-header">
+        <span style="display:flex; align-items:center;">
+          <span class="color-dot" style="background:${cc}"></span>
+          ${esc(c)}
+        </span>
+        <span class="export-card-row-amount" style="color:${cc}">R$ ${fmt(data.total)}</span>
+      </div>
+      <div class="export-card-items-detail">
+        ${itemsHtml}
+      </div>
+    </div>`;
+  }).join('');
+
+  return `
+    <div class="export-card-template">
+      <div class="export-card-logo-container">
+        <div class="export-card-logo-left">
+          <img src="assets/Klif%20Despesas.png" alt="Logo" style="height:22px; width:auto;">
+          <div>
+            <h1 class="export-card-logo-title">Klif Despesas</h1>
+            <div class="export-card-logo-sub">Controle de Gastos</div>
+          </div>
+        </div>
+        <div class="export-card-period">
+          Período: <strong>${monthName}</strong>
+        </div>
+      </div>
+      
+      <div class="export-card-person-header" style="justify-content: space-between; width: 100%;">
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <div class="export-card-avatar" style="background:${pc}22; color:${pc}">
+            ${person.substring(0,2).toUpperCase()}
+          </div>
+          <div class="export-card-person-name">${esc(person)}</div>
+        </div>
+        <div class="export-card-total-badge" style="color:${pc}; background:${pc}12; border: 1px solid ${pc}40;">
+          R$ ${fmt(total)}
+        </div>
+      </div>
+      
+      <div class="export-card-cards-grid">
+        ${cardRowsHtml}
+      </div>
+      
+      ${noteHtml}
+      
+      <div class="export-card-footer">
+        Gerado em ${new Date().toLocaleDateString('pt-BR')} por Klif Despesas
+      </div>
+    </div>
+  `;
+}
+
 async function exportSelectedPngs() {
   const checkedBoxes = document.querySelectorAll('.export-png-checkbox:checked');
   if (!checkedBoxes.length) {
@@ -692,56 +781,13 @@ async function exportSelectedPngs() {
 
   closeModal('modal-export-png');
 
+  let zip = null;
+  if (selectedPeople.length > 1) {
+    zip = new JSZip();
+  }
+
   try {
     for (const person of selectedPeople) {
-      const pc = getColor(state.persons, person);
-      const cards = state.cards.filter(c => byPerson[person][c]?.total > 0);
-      const total = cards.reduce((s,c) => s+(byPerson[person][c]?.total||0), 0);
-
-      const noteObj = state.anotacoes ? state.anotacoes.find(n => n.pessoa === person && n.mes_id === state.currentMonth) : null;
-      const noteText = noteObj ? noteObj.texto.trim() : '';
-      const noteHtml = noteText !== '' 
-        ? `<div class="export-card-note-box">
-            <div class="export-card-note-title">📝 Anotações do Mês</div>
-            <div class="export-card-note-text">${esc(noteText)}</div>
-           </div>`
-        : '';
-
-      const cardRowsHtml = cards.map(c => {
-        const cc = getColor(state.cards, c);
-        const data = byPerson[person][c];
-        
-        const itemsHtml = data.items.map(g => {
-          const pAt = g.parcela_atual || 1;
-          const badge = g.parcelas > 1
-            ? `<span class="parc-badge" style="background:${cc}18;color:${cc}">${pAt}/${g.parcelas}x</span>`
-            : `<span style="color:var(--text3)">À vista</span>`;
-          const dLabel = g.descricao
-            ? `<span class="export-card-detail-desc">${esc(g.descricao)}</span>`
-            : `<span class="export-card-detail-desc empty">sem descrição</span>`;
-          return `<div class="export-card-detail-item">
-            <div class="export-card-detail-left">
-              ${dLabel}
-              <div class="export-card-detail-parc">${badge}</div>
-            </div>
-            <span class="export-card-detail-valor" style="color:${Number(g.valor) < 0 ? 'var(--red)' : 'var(--green)'}">R$ ${fmt(Number(g.valor))}</span>
-          </div>`;
-        }).join('');
-
-        return `<div class="export-card-row">
-          <div class="export-card-row-header">
-            <span style="display:flex; align-items:center;">
-              <span class="color-dot" style="background:${cc}"></span>
-              ${esc(c)}
-            </span>
-            <span class="export-card-row-amount" style="color:${cc}">R$ ${fmt(data.total)}</span>
-          </div>
-          <div class="export-card-items-detail">
-            ${itemsHtml}
-          </div>
-        </div>`;
-      }).join('');
-
       const container = document.createElement('div');
       container.style.position = 'absolute';
       container.style.left = '-9999px';
@@ -749,45 +795,7 @@ async function exportSelectedPngs() {
       container.style.width = '440px';
       container.style.zIndex = '-9999';
 
-      container.innerHTML = `
-        <div class="export-card-template">
-          <div class="export-card-logo-container">
-            <div class="export-card-logo-left">
-              <img src="assets/Klif%20Despesas.png" alt="Logo" style="height:22px; width:auto;">
-              <div>
-                <h1 class="export-card-logo-title">Klif Despesas</h1>
-                <div class="export-card-logo-sub">Controle de Gastos</div>
-              </div>
-            </div>
-            <div class="export-card-period">
-              Período: <strong>${monthName}</strong>
-            </div>
-          </div>
-          
-          <div class="export-card-person-header" style="justify-content: space-between; width: 100%;">
-            <div style="display: flex; align-items: center; gap: 12px;">
-              <div class="export-card-avatar" style="background:${pc}22; color:${pc}">
-                ${person.substring(0,2).toUpperCase()}
-              </div>
-              <div class="export-card-person-name">${esc(person)}</div>
-            </div>
-            <div class="export-card-total-badge" style="color:${pc}; background:${pc}12; border: 1px solid ${pc}40;">
-              R$ ${fmt(total)}
-            </div>
-          </div>
-          
-          <div class="export-card-cards-grid">
-            ${cardRowsHtml}
-          </div>
-          
-          ${noteHtml}
-          
-          <div class="export-card-footer">
-            Gerado em ${new Date().toLocaleDateString('pt-BR')} por Klif Despesas
-          </div>
-        </div>
-      `;
-
+      container.innerHTML = generatePersonCardHtml(person, monthName, byPerson);
       document.body.appendChild(container);
 
       await new Promise(resolve => setTimeout(resolve, 150));
@@ -801,16 +809,33 @@ async function exportSelectedPngs() {
 
       document.body.removeChild(container);
 
-      const imgData = canvas.toDataURL('image/png');
-      const a = document.createElement('a');
-      a.href = imgData;
+      const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
       const sanitizedName = person.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9_-]/g, "_");
       const sanitizedMonth = monthName.replace('/', '-');
-      a.download = `klif-despesas-${sanitizedName}-${sanitizedMonth}.png`;
-      a.click();
+      const filename = `klif-despesas-${sanitizedName}-${sanitizedMonth}.png`;
+
+      if (zip) {
+        zip.file(filename, blob);
+      } else {
+        const imgData = canvas.toDataURL('image/png');
+        const a = document.createElement('a');
+        a.href = imgData;
+        a.download = filename;
+        a.click();
+      }
     }
-    
-    toast('Imagens exportadas com sucesso!', 'success');
+
+    if (zip) {
+      const content = await zip.generateAsync({type: 'blob'});
+      const sanitizedMonth = monthName.replace('/', '-');
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(content);
+      a.download = `klif-despesas-relatorios-${sanitizedMonth}.zip`;
+      a.click();
+      toast('Imagens exportadas e compactadas em ZIP!', 'success');
+    } else {
+      toast('Imagem exportada com sucesso!', 'success');
+    }
   } catch (err) {
     console.error('Erro na exportação de PNG:', err);
     toast('Erro ao gerar imagem.', 'error');
@@ -819,4 +844,81 @@ async function exportSelectedPngs() {
     btn.textContent = originalText;
   }
 }
+
+async function copyPersonCardToClipboard(event, person) {
+  if (event) event.stopPropagation();
+
+  const btn = event?.currentTarget;
+  const originalHtml = btn ? btn.innerHTML : '';
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = `<span class="spinner" style="width:12px;height:12px;border-width:1.5px;margin:0;"></span>`;
+  }
+
+  const month = state.months.find(m => m.id === state.currentMonth);
+  const monthName = month?.nome || 'Mês';
+
+  const byPerson = {};
+  state.persons.forEach(p => { byPerson[p] = {}; });
+  state.gastos.forEach(g => {
+    if (!byPerson[g.pessoa]) byPerson[g.pessoa] = {};
+    if (!byPerson[g.pessoa][g.cartao]) byPerson[g.pessoa][g.cartao] = { total:0, items:[] };
+    byPerson[g.pessoa][g.cartao].total += Number(g.valor);
+    byPerson[g.pessoa][g.cartao].items.push(g);
+  });
+
+  const container = document.createElement('div');
+  container.style.position = 'absolute';
+  container.style.left = '-9999px';
+  container.style.top = '0';
+  container.style.width = '440px';
+  container.style.zIndex = '-9999';
+
+  container.innerHTML = generatePersonCardHtml(person, monthName, byPerson);
+  document.body.appendChild(container);
+
+  try {
+    await new Promise(resolve => setTimeout(resolve, 150));
+
+    const canvas = await html2canvas(container, {
+      useCORS: true,
+      backgroundColor: '#0F172A',
+      scale: 2, 
+      logging: false
+    });
+
+    document.body.removeChild(container);
+
+    canvas.toBlob(async (blob) => {
+      if (!blob) {
+        toast('Erro ao gerar imagem para cópia.', 'error');
+        return;
+      }
+      try {
+        await navigator.clipboard.write([
+          new ClipboardItem({
+            [blob.type]: blob
+          })
+        ]);
+        toast('Imagem copiada para a área de transferência!', 'success');
+      } catch (err) {
+        console.error('Erro ao copiar imagem:', err);
+        toast('Erro ao copiar imagem. Certifique-se de que a página tem permissão.', 'error');
+      }
+    }, 'image/png');
+
+  } catch (err) {
+    console.error('Erro ao gerar imagem:', err);
+    toast('Erro ao processar imagem.', 'error');
+    if (container.parentNode) {
+      document.body.removeChild(container);
+    }
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = originalHtml;
+    }
+  }
+}
+
 

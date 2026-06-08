@@ -397,6 +397,9 @@ function renderResumo() {
         <div style="flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px;">
           <div class="person-name" style="margin: 0;">${esc(person)}${noteIndicator}</div>
         </div>
+        <button class="btn-copy-card-img" title="Copiar Imagem" onclick="copyPersonCardToClipboard(event, '${esc(person)}')">
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+        </button>
         <div class="person-total-badge" style="color:${pc}; background:${pc}12; border: 1px solid ${pc}40;">R$ ${fmt(total)}</div>
         <span class="person-toggle ${isOpen?'open':''}" style="margin-left: 8px;">▼</span>
       </div>
