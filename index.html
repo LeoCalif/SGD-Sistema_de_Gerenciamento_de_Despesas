@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Klif Despesas - Controle de Gastos</title>
   <link rel="icon" type="image/png" href="assets/Klif%20Despesas.png">
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#0F172A">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/style.css">
@@ -526,6 +528,13 @@
 <script src="js/render.js"></script>
 <script src="js/importexport.js"></script>
 <script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('sw.js')
+        .then(reg => console.log('Service Worker registrado com sucesso:', reg.scope))
+        .catch(err => console.error('Falha ao registrar o Service Worker:', err));
+    });
+  }
   checkSession();
 </script>
 </body>

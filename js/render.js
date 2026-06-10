@@ -515,47 +515,174 @@ function renderCartoesView() {
   const active = state.cards.filter(c => by[c].total > 0);
   const grand  = active.reduce((s,c) => s+by[c].total, 0);
 
-  summary.innerHTML = `<div class="summary-card accent">
-    <div class="s-label">Total geral</div>
+  // General Summary Note
+  const isGeneralNoteOpen = expandedCardNotes.has('Total Geral');
+  const noteObjGeneral = state.anotacoes ? state.anotacoes.find(n => n.pessoa === `[CARTAO] Total Geral` && n.mes_id === state.currentMonth) : null;
+  const noteTextGeneral = noteObjGeneral ? noteObjGeneral.texto : '';
+  const hasGeneralNote = noteTextGeneral.trim() !== '';
+  const generalNoteIndicator = hasGeneralNote ? ' <span style="font-size: 12px; margin-left: 4px;" class="card-note-indicator">📝</span>' : '';
+
+  summary.innerHTML = `<div class="summary-card accent" style="display:flex; flex-direction:column; cursor:pointer;" onclick="toggleCardNote('Total Geral')">
+    <div style="display:flex; justify-content:space-between; align-items:center; width:100%;">
+      <div class="s-label">Total geral${generalNoteIndicator}</div>
+      <span class="person-toggle ${isGeneralNoteOpen?'open':''}" style="font-size:10px; display:inline-block;">▼</span>
+    </div>
     <div class="s-value">R$ ${fmt(grand)}</div>
-    <div class="s-sub">${active.length} cartões com gastos</div>
-  </div>` + active.map(c => `
-    <div class="summary-card">
-      <div class="s-label" style="color:${getColor(state.cards,c)}">${esc(c)}</div>
+    <div class="s-sub" style="margin-bottom:8px">${active.length} cartões com gastos</div>
+    <div class="card-note-wrapper${isGeneralNoteOpen?'':' hidden'}" style="margin-top:auto; border-top: 1px solid var(--border); padding-top: 8px;" onclick="event.stopPropagation()">
+      <div style="font-size:10px; color:var(--text3); margin-bottom:4px; display:flex; justify-content:space-between; align-items:center;">
+        <span>📝 Anotação</span>
+        <span class="save-status" id="card-note-status-Total-Geral" style="font-size:9px; text-transform:none; opacity:0.8;"></span>
+      </div>
+      <textarea 
+        class="note-textarea" 
+        placeholder="Observação geral..." 
+        style="min-height: 45px; font-size: 11px; padding: 6px; width:100%;"
+        onblur="saveNoteForCard('Total Geral', this.value)"
+        oninput="updateCardNoteStatus('Total Geral')"
+      >${esc(noteTextGeneral)}</textarea>
+    </div>
+  </div>` + active.map(c => {
+    const isNoteOpen = expandedCardNotes.has(c);
+    const noteObj = state.anotacoes ? state.anotacoes.find(n => n.pessoa === `[CARTAO] ${c}` && n.mes_id === state.currentMonth) : null;
+    const noteText = noteObj ? noteObj.texto : '';
+    const hasNote = noteText.trim() !== '';
+    const noteIndicator = hasNote ? ' <span style="font-size: 12px; margin-left: 4px;" class="card-note-indicator">📝</span>' : '';
+
+    return `
+    <div class="summary-card" style="display:flex; flex-direction:column; cursor:pointer;" onclick="toggleCardNote('${esc(c)}')">
+      <div style="display:flex; justify-content:space-between; align-items:center; width:100%;">
+        <div class="s-label" style="color:${getColor(state.cards,c)}">${esc(c)}${noteIndicator}</div>
+        <span class="person-toggle ${isNoteOpen?'open':''}" style="font-size:10px; display:inline-block;">▼</span>
+      </div>
       <div class="s-value">R$ ${fmt(by[c].total)}</div>
-      <div class="s-sub">${by[c].items.length} lançamento(s)</div>
-    </div>`).join('');
+      <div class="s-sub" style="margin-bottom:8px">${by[c].items.length} lançamento(s)</div>
+      <div class="card-note-wrapper${isNoteOpen?'':' hidden'}" style="margin-top:auto; border-top: 1px solid var(--border); padding-top: 8px;" onclick="event.stopPropagation()">
+        <div style="font-size:10px; color:var(--text3); margin-bottom:4px; display:flex; justify-content:space-between; align-items:center;">
+          <span>📝 Anotação</span>
+          <span class="save-status" id="card-note-status-${esc(c).replace(/\s+/g, '-')}" style="font-size:9px; text-transform:none; opacity:0.8;"></span>
+        </div>
+        <textarea 
+          class="note-textarea" 
+          placeholder="Observação..." 
+          style="min-height: 45px; font-size: 11px; padding: 6px; width:100%;"
+          onblur="saveNoteForCard('${esc(c)}', this.value)"
+          oninput="updateCardNoteStatus('${esc(c)}')"
+        >${esc(noteText)}</textarea>
+      </div>
+    </div>`;
+  }).join('');
 
   detail.innerHTML = active.map(c => {
     const color = getColor(state.cards,c);
     const byP   = {};
     by[c].items.forEach(g => { byP[g.pessoa]=(byP[g.pessoa]||0)+Number(g.valor); });
+    const isCardOpen = expandedCards.has(c);
+
     return `<div class="table-card" style="margin-bottom:16px">
-      <div class="table-card-header">
+      <!-- HEADER (Clickable to toggle details) -->
+      <div class="table-card-header" style="cursor:pointer" onclick="toggleCardSection('${esc(c)}')">
         <h2 style="display:flex;align-items:center;gap:8px">
           <span class="color-dot" style="background:${color};width:12px;height:12px"></span>${esc(c)}
         </h2>
-        <div><span class="total-label">Total:</span>
-          <span class="total-value" style="color:${color}">R$ ${fmt(by[c].total)}</span>
+        <div style="display:flex;align-items:center;gap:12px">
+          <div><span class="total-label">Total:</span>
+            <span class="total-value" style="color:${color}">R$ ${fmt(by[c].total)}</span>
+          </div>
+          <span class="person-toggle ${isCardOpen?'open':''}" style="margin-left: 8px;">▼</span>
         </div>
       </div>
+      
+      <!-- SUB-TOTALS BY PERSON (ALWAYS VISIBLE) -->
       <div style="display:flex;gap:8px;flex-wrap:wrap;padding:12px 14px;border-bottom:1px solid var(--border)">
         ${Object.entries(byP).map(([p,v])=>{const pc=getColor(state.persons,p);return `
           <div style="background:${pc}18;color:${pc};padding:5px 12px;border-radius:20px;font-size:12px;font-weight:500">
             ${esc(p)}: R$ ${fmt(v)}</div>`;}).join('')}
       </div>
-      <div class="scrollable"><table><thead><tr>
-        <th>Descrição</th><th>Pessoa</th><th>Parcelas</th><th style="text-align:right">Valor</th>
-      </tr></thead><tbody>
-        ${by[c].items.map(g=>{const pc=getColor(state.persons,g.pessoa);return `<tr>
-          <td>${descLabel(g.descricao)}</td>
-          <td><span class="pill" style="background:${pc}22;color:${pc}">${esc(g.pessoa)}</span></td>
-          <td style="color:var(--text3)">${parcLabel(g.parcelas)}</td>
-          <td class="amount-cell" style="text-align:right;color:${Number(g.valor)<0?'var(--red)':'var(--green)'}">R$ ${fmt(Number(g.valor))}</td>
-        </tr>`;}).join('')}
-      </tbody></table></div>
+      
+      <!-- EXPANDABLE TABLE DETAILS -->
+      <div class="card-summary-body${isCardOpen?'':' hidden'}">
+        <div class="scrollable"><table><thead><tr>
+          <th>Descrição</th><th>Pessoa</th><th>Parcelas</th><th style="text-align:right">Valor</th>
+        </tr></thead><tbody>
+          ${by[c].items.map(g=>{const pc=getColor(state.persons,g.pessoa);return `<tr>
+            <td>${descLabel(g.descricao)}</td>
+            <td><span class="pill" style="background:${pc}22;color:${pc}">${esc(g.pessoa)}</span></td>
+            <td style="color:var(--text3)">${parcLabel(g.parcelas)}</td>
+            <td class="amount-cell" style="text-align:right;color:${Number(g.valor)<0?'var(--red)':'var(--green)'}">R$ ${fmt(Number(g.valor))}</td>
+          </tr>`;}).join('')}
+        </tbody></table></div>
+      </div>
     </div>`;
   }).join('');
+}
+
+function toggleCardNote(cardName) {
+  const isOpening = !expandedCardNotes.has(cardName);
+  if (isOpening) expandedCardNotes.add(cardName);
+  else expandedCardNotes.delete(cardName);
+  renderCartoesView();
+}
+
+function toggleCardSection(cardName) {
+  const isOpening = !expandedCards.has(cardName);
+  if (isOpening) expandedCards.add(cardName);
+  else expandedCards.delete(cardName);
+  renderCartoesView();
+}
+
+async function saveNoteForCard(cardName, value) {
+  const statusEl = document.getElementById(`card-note-status-${cardName.replace(/\s+/g, '-')}`);
+  if (statusEl) {
+    statusEl.textContent = '⏱ Salvando...';
+    statusEl.style.color = 'var(--green)';
+  }
+  
+  try {
+    await saveAnotacao(`[CARTAO] ${cardName}`, value);
+    if (statusEl) statusEl.textContent = '✅ Salvo!';
+    
+    // Update the note indicator next to the card name directly in the DOM
+    const hasNote = value.trim() !== '';
+    const noteIndicator = hasNote ? ' <span style="font-size: 12px; margin-left: 4px;" class="card-note-indicator">📝</span>' : '';
+    
+    if (cardName === 'Total Geral') {
+      const labelEl = document.querySelector('.summary-card.accent .s-label');
+      if (labelEl) {
+        labelEl.innerHTML = `Total geral${noteIndicator}`;
+      }
+    } else {
+      const cards = document.querySelectorAll('.summary-grid .summary-card');
+      for (const card of cards) {
+        const label = card.querySelector('.s-label');
+        if (label && label.textContent.replace('📝', '').trim() === cardName) {
+          label.innerHTML = `${esc(cardName)}${noteIndicator}`;
+          break;
+        }
+      }
+    }
+    
+    setTimeout(() => {
+      const currentStatusEl = document.getElementById(`card-note-status-${cardName.replace(/\s+/g, '-')}`);
+      if (currentStatusEl && currentStatusEl.textContent === '✅ Salvo!') {
+        currentStatusEl.textContent = '';
+      }
+    }, 2000);
+  } catch (err) {
+    if (statusEl) {
+      statusEl.textContent = '❌ Erro ao salvar';
+      statusEl.style.color = 'var(--red)';
+    }
+    console.error(err);
+  }
+}
+
+function updateCardNoteStatus(cardName) {
+  const statusEl = document.getElementById(`card-note-status-${cardName.replace(/\s+/g, '-')}`);
+  if (statusEl) {
+    statusEl.textContent = '✍️ Editando...';
+    statusEl.style.color = 'var(--amber)';
+  }
 }
 
 // ── CONFIG ────────────────────────────────────────────

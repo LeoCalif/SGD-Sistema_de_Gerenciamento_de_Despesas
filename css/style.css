@@ -319,7 +319,7 @@ tbody td          { padding: 10px 14px; font-size: 13px; }
 .summary-card.accent .s-value { color: var(--accent); }
 
 /* ── PEOPLE GRID ───────────────────────────────────── */
-.people-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; margin-bottom: 24px; }
+.people-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; margin-bottom: 24px; align-items: start; }
 .person-card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); }
 
 .person-card-header {
